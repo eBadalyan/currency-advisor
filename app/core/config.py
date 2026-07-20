@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     cba_max_retries: int = 3
     cba_collection_interval_minutes: int = 30
 
+    cbr_base_url: str = "https://www.cbr.ru/scripts/XML_daily.asp"
+    cbr_timeout_seconds: float = 10.0
+    cbr_max_retries: int = 3
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
