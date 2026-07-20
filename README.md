@@ -40,4 +40,4 @@ uv run pytest
 - Telegram bot skeleton
 - CI, Ruff, pytest, pre-commit
 
-Следующий этап: официальный коллектор курсов ЦБ Армении и первая миграция Alembic.
+Полный план этапов и архитектурные решения — в [ROADMAP.md](ROADMAP.md).
