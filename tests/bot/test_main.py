@@ -7,9 +7,12 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.bot.main import format_rate_reply, rate, start
+from app.analytics.service import AnalyticsService
+from app.bot.main import advice, format_advice_reply, format_rate_reply, rate, start
 from app.collectors.base import RatePoint
 from app.collectors.cba import SOURCE_NAME
+from app.recommendations.rule_based import RuleBasedRecommendationStrategy
+from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.rate_service import RateService
 
@@ -66,3 +69,42 @@ async def test_rate_handler_replies_with_formatted_rate(
 
     message.answer.assert_awaited_once()
     assert "4.6651" in message.answer.call_args.args[0]
+
+
+async def test_format_advice_reply_with_no_data(db_session: AsyncSession) -> None:
+    repository = ExchangeRateRepository(db_session)
+    service = RecommendationService(
+        repository, AnalyticsService(repository), RuleBasedRecommendationStrategy()
+    )
+
+    reply = await format_advice_reply(service)
+
+    assert "Недостаточно данных" in reply
+
+
+async def test_format_advice_reply_with_data(db_session: AsyncSession) -> None:
+    repository = ExchangeRateRepository(db_session)
+    await repository.save(_rate_point("4.6651"))
+    service = RecommendationService(
+        repository, AnalyticsService(repository), RuleBasedRecommendationStrategy()
+    )
+
+    reply = await format_advice_reply(service)
+
+    assert "не предсказывает будущее" in reply
+    assert "Факторы:" in reply
+
+
+async def test_advice_handler_replies_with_formatted_recommendation(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.bot.main.SessionFactory", test_session_factory)
+    await ExchangeRateRepository(db_session).save(_rate_point("4.6651"))
+    message = AsyncMock()
+
+    await advice(message)
+
+    message.answer.assert_awaited_once()
+    assert "не предсказывает будущее" in message.answer.call_args.args[0]
