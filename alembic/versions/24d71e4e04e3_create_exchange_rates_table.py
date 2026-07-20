@@ -1,12 +1,14 @@
 """create exchange rates table"""
-from typing import Sequence, Union
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
 
+from alembic import op
+
 revision: str = '24d71e4e04e3'
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -21,10 +23,30 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('source', 'base_currency', 'quote_currency', 'observed_at')
     )
-    op.create_index(op.f('ix_exchange_rates_base_currency'), 'exchange_rates', ['base_currency'], unique=False)
-    op.create_index(op.f('ix_exchange_rates_observed_at'), 'exchange_rates', ['observed_at'], unique=False)
-    op.create_index(op.f('ix_exchange_rates_quote_currency'), 'exchange_rates', ['quote_currency'], unique=False)
-    op.create_index(op.f('ix_exchange_rates_source'), 'exchange_rates', ['source'], unique=False)
+    op.create_index(
+        op.f("ix_exchange_rates_base_currency"),
+        "exchange_rates",
+        ["base_currency"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_exchange_rates_observed_at"),
+        "exchange_rates",
+        ["observed_at"],
+        unique=False,
+    )
+    op.create_index(
+        op.f("ix_exchange_rates_quote_currency"),
+        "exchange_rates",
+        ["quote_currency"],
+        unique=False,
+    )
+    op.create_index(
+        op.f('ix_exchange_rates_source'),
+        'exchange_rates',
+        ['source'],
+        unique=False
+    )
     # ### end Alembic commands ###
 
 
