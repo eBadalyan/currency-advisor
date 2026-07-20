@@ -9,9 +9,7 @@ from app.db.base import Base
 
 class ExchangeRate(Base):
     __tablename__ = "exchange_rates"
-    __table_args__ = (
-        UniqueConstraint("source", "base_currency", "quote_currency", "observed_at"),
-    )
+    __table_args__ = (UniqueConstraint("source", "base_currency", "quote_currency", "observed_at"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     source: Mapped[str] = mapped_column(String(50), index=True)
