@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
   "aiogram>=3.20,<4",
   "alembic>=1.14,<2",
+  "apscheduler>=3.11.3",
   "asyncpg>=0.30,<1",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
@@ -41,6 +42,10 @@ select = ["E", "F", "I", "B", "UP"]
 python_version = "3.13"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 include = ["app*"]

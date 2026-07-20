@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     cba_base_url: str = "https://api.cba.am/exchangerates.asmx"
     cba_timeout_seconds: float = 10.0
     cba_max_retries: int = 3
+    cba_collection_interval_minutes: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
