@@ -102,3 +102,53 @@ async def test_find_by_date_exact_match_and_none(db_session: AsyncSession) -> No
 
     assert found == point
     assert missing is None
+
+
+async def test_list_history_returns_points_newest_first(db_session: AsyncSession) -> None:
+    repo = ExchangeRateRepository(db_session)
+    oldest = _rate_point(observed_at=_OBSERVED_AT - timedelta(days=2), value=Decimal("4.4"))
+    middle = _rate_point(observed_at=_OBSERVED_AT - timedelta(days=1), value=Decimal("4.5"))
+    newest = _rate_point(observed_at=_OBSERVED_AT, value=Decimal("4.6"))
+    await repo.bulk_save([oldest, newest, middle])
+
+    history = await repo.list_history(_SOURCE, "RUB", "AMD")
+
+    assert history == [newest, middle, oldest]
+
+
+async def test_list_history_filters_by_since_and_until(db_session: AsyncSession) -> None:
+    repo = ExchangeRateRepository(db_session)
+    oldest = _rate_point(observed_at=_OBSERVED_AT - timedelta(days=2), value=Decimal("4.4"))
+    middle = _rate_point(observed_at=_OBSERVED_AT - timedelta(days=1), value=Decimal("4.5"))
+    newest = _rate_point(observed_at=_OBSERVED_AT, value=Decimal("4.6"))
+    await repo.bulk_save([oldest, middle, newest])
+
+    history = await repo.list_history(
+        _SOURCE,
+        "RUB",
+        "AMD",
+        since=_OBSERVED_AT - timedelta(days=1),
+        until=_OBSERVED_AT,
+    )
+
+    assert history == [newest, middle]
+
+
+async def test_list_history_respects_limit(db_session: AsyncSession) -> None:
+    repo = ExchangeRateRepository(db_session)
+    points = [
+        _rate_point(observed_at=_OBSERVED_AT - timedelta(days=i), value=Decimal("4.5"))
+        for i in range(5)
+    ]
+    await repo.bulk_save(points)
+
+    history = await repo.list_history(_SOURCE, "RUB", "AMD", limit=2)
+
+    assert len(history) == 2
+    assert history[0].observed_at == _OBSERVED_AT
+
+
+async def test_list_history_returns_empty_list_when_no_data(db_session: AsyncSession) -> None:
+    repo = ExchangeRateRepository(db_session)
+
+    assert await repo.list_history(_SOURCE, "RUB", "AMD") == []

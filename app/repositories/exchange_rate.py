@@ -79,6 +79,30 @@ class ExchangeRateRepository:
         row = (await self._session.execute(stmt)).scalar_one_or_none()
         return self._to_rate_point(row) if row is not None else None
 
+    async def list_history(
+        self,
+        source: str,
+        base_currency: str,
+        quote_currency: str,
+        *,
+        since: datetime | None = None,
+        until: datetime | None = None,
+        limit: int = 100,
+    ) -> list[RatePoint]:
+        stmt = select(ExchangeRate).where(
+            ExchangeRate.source == source,
+            ExchangeRate.base_currency == base_currency,
+            ExchangeRate.quote_currency == quote_currency,
+        )
+        if since is not None:
+            stmt = stmt.where(ExchangeRate.observed_at >= since)
+        if until is not None:
+            stmt = stmt.where(ExchangeRate.observed_at <= until)
+        stmt = stmt.order_by(ExchangeRate.observed_at.desc()).limit(limit)
+
+        rows = (await self._session.execute(stmt)).scalars().all()
+        return [self._to_rate_point(row) for row in rows]
+
     async def exists(
         self, source: str, base_currency: str, quote_currency: str, observed_at: datetime
     ) -> bool:

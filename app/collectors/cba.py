@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 _SOAP_ACTION = "http://www.cba.am/ExchangeRatesByDateByISO"
 _NAMESPACE = "http://www.cba.am/"
-_SOURCE_NAME = "Central Bank of Armenia"
+SOURCE_NAME = "Central Bank of Armenia"
 _QUOTE_CURRENCY = "AMD"
 _COLLECTED_CURRENCIES = ("RUB", "USD")
 
@@ -149,7 +149,7 @@ class CBACollector(RateCollector):
             raise CollectorResponseError(f"CBA returned an unparsable rate for {iso}") from exc
 
         return RatePoint(
-            source=_SOURCE_NAME,
+            source=SOURCE_NAME,
             base_currency=iso,
             quote_currency=_QUOTE_CURRENCY,
             value=value,

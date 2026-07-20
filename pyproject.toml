@@ -29,6 +29,14 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# The app's DB engine (app/db/session.py) is a module-level singleton
+# created once at import time. A fresh event loop per test (pytest-asyncio's
+# default) leaves its pooled connections bound to a loop that later tests'
+# loops don't share, which asyncpg/SQLAlchemy surface as "Event loop is
+# closed" on connection teardown. One event loop for the whole session
+# keeps that singleton valid throughout the run.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 pythonpath = ["."]
 
 [tool.ruff]
@@ -37,6 +45,9 @@ target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
 
 [tool.mypy]
 python_version = "3.13"
