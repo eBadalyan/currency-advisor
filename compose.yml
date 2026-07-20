@@ -18,6 +18,12 @@ services:
   api:
     build: .
     env_file: .env
+    environment:
+      # .env's DATABASE_URL is host-oriented (127.0.0.1:5433, for running
+      # uvicorn directly on the host). Inside this container, the DB is
+      # reachable at the "postgres" service name on its internal port —
+      # this override takes precedence over env_file for the same key.
+      DATABASE_URL: postgresql+asyncpg://currency:currency@postgres:5432/currency
     ports:
       - "8000:8000"
     depends_on:
