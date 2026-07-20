@@ -4,7 +4,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
-from sqlalchemy.ext.asyncio import AsyncSession
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.bot.main import format_rate_reply, rate, start
 from app.collectors.base import RatePoint
@@ -48,7 +49,16 @@ async def test_format_rate_reply_with_no_data(db_session: AsyncSession) -> None:
     assert "пока не собран" in reply
 
 
-async def test_rate_handler_replies_with_formatted_rate(db_session: AsyncSession) -> None:
+async def test_rate_handler_replies_with_formatted_rate(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # rate() opens its own session via the module-level SessionFactory
+    # rather than taking one as a parameter (it's a real polling-bot
+    # handler, not FastAPI-DI'd) — point that at the isolated test
+    # database so it sees what db_session just seeded.
+    monkeypatch.setattr("app.bot.main.SessionFactory", test_session_factory)
     await ExchangeRateRepository(db_session).save(_rate_point("4.6651"))
     message = AsyncMock()
 
