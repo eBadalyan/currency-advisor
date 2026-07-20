@@ -62,3 +62,17 @@ async def test_collect_and_save_is_idempotent_when_rerun(db_session: AsyncSessio
     assert row_count == 1
     latest = await ExchangeRateRepository(db_session).get_latest(_SOURCE, "RUB", "AMD")
     assert latest == _rate_point("RUB", "4.6")
+
+
+async def test_get_latest_rate_returns_point(db_session: AsyncSession) -> None:
+    repository = ExchangeRateRepository(db_session)
+    await repository.save(_rate_point("RUB", "4.6"))
+    service = RateService(repository)
+
+    assert await service.get_latest_rate(_SOURCE, "RUB", "AMD") == _rate_point("RUB", "4.6")
+
+
+async def test_get_latest_rate_returns_none_when_no_data(db_session: AsyncSession) -> None:
+    service = RateService(ExchangeRateRepository(db_session))
+
+    assert await service.get_latest_rate(_SOURCE, "RUB", "AMD") is None
