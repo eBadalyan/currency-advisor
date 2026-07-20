@@ -6,15 +6,25 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
+from app.analytics.service import AnalyticsService
 from app.collectors.cba import SOURCE_NAME
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.session import SessionFactory
+from app.recommendations.models import RecommendationAction
+from app.recommendations.rule_based import RuleBasedRecommendationStrategy
+from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.rate_service import RateService
 
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
+
+_ACTION_LABELS = {
+    RecommendationAction.EXCHANGE_NOW: "Менять сейчас",
+    RecommendationAction.WAIT: "Подождать",
+    RecommendationAction.NEUTRAL: "Нет чёткой рекомендации",
+}
 
 dp = Dispatcher()
 
@@ -23,7 +33,8 @@ dp = Dispatcher()
 async def start(message: Message) -> None:
     await message.answer(
         "Currency Advisor отслеживает курс RUB/AMD по данным ЦБ Армении.\n"
-        "Команда /rate — последний известный курс."
+        "Команда /rate — последний известный курс.\n"
+        "Команда /advice — менять сейчас или подождать, и почему."
     )
 
 
@@ -39,6 +50,27 @@ async def rate(message: Message) -> None:
     async with SessionFactory() as session:
         service = RateService(ExchangeRateRepository(session))
         reply = await format_rate_reply(service)
+    await message.answer(reply)
+
+
+async def format_advice_reply(service: RecommendationService) -> str:
+    recommendation = await service.get_recommendation()
+    if recommendation is None:
+        return "Недостаточно данных для рекомендации. Попробуйте позже."
+
+    lines = [_ACTION_LABELS[recommendation.action], "", recommendation.summary, "", "Факторы:"]
+    lines.extend(f"- {factor.explanation}" for factor in recommendation.factors)
+    return "\n".join(lines)
+
+
+@dp.message(Command("advice"))
+async def advice(message: Message) -> None:
+    async with SessionFactory() as session:
+        repository = ExchangeRateRepository(session)
+        service = RecommendationService(
+            repository, AnalyticsService(repository), RuleBasedRecommendationStrategy()
+        )
+        reply = await format_advice_reply(service)
     await message.answer(reply)
 
 
