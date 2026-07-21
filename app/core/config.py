@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     vtb_am_max_retries: int = 3
     vtb_am_collection_interval_minutes: int = 30
 
+    bank_average_collection_interval_minutes: int = 30
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 

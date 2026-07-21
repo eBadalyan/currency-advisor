@@ -18,6 +18,7 @@ from app.collectors.evocabank import EvocabankCollector
 from app.collectors.vtb_am import VtbArmeniaCollector
 from app.core.config import get_settings
 from app.repositories.exchange_rate import ExchangeRateRepository
+from app.services.bank_average_service import BankAverageService
 from app.services.rate_service import RateService
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,7 @@ _AMERIABANK_JOB_ID = "ameriabank_collection"
 _EVOCABANK_JOB_ID = "evocabank_collection"
 _ACBA_BANK_JOB_ID = "acba_bank_collection"
 _VTB_AM_JOB_ID = "vtb_am_collection"
+_BANK_AVERAGE_JOB_ID = "bank_average_aggregation"
 
 
 async def run_collection(service: RateService, collector: RateCollector) -> list[RatePoint] | None:
@@ -58,6 +60,22 @@ async def _run_scheduled_collection(
         await run_collection(service, collector)
 
 
+async def _run_bank_average_aggregation(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Not a RateCollector job (no external I/O), so it doesn't fit
+    _run_scheduled_collection's (client, collector_factory) shape — same
+    swallow-and-log error boundary as run_collection, just for a Service
+    instead of a Collector.
+    """
+    async with session_factory() as session:
+        service = BankAverageService(ExchangeRateRepository(session))
+        try:
+            await service.compute_and_save()
+        except Exception:
+            logger.exception("collection_scheduler.bank_average_failed")
+
+
 def build_scheduler(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession]
 ) -> AsyncIOScheduler:
@@ -82,4 +100,14 @@ def build_scheduler(
             coalesce=True,
             misfire_grace_time=60,
         )
+    scheduler.add_job(
+        _run_bank_average_aggregation,
+        trigger=IntervalTrigger(minutes=settings.bank_average_collection_interval_minutes),
+        args=(session_factory,),
+        id=_BANK_AVERAGE_JOB_ID,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=60,
+    )
     return scheduler
