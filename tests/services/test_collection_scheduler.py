@@ -11,6 +11,7 @@ from app.collectors.base import RateCollector, RatePoint
 from app.core.config import get_settings
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.collection_scheduler import (
+    _AMERIABANK_JOB_ID,
     _CBA_JOB_ID,
     _CBR_JOB_ID,
     build_scheduler,
@@ -85,4 +86,19 @@ def test_build_scheduler_registers_cbr_job_with_configured_interval() -> None:
     assert isinstance(job.trigger, IntervalTrigger)
     assert (
         job.trigger.interval.total_seconds() == get_settings().cbr_collection_interval_minutes * 60
+    )
+
+
+def test_build_scheduler_registers_ameriabank_job_with_configured_interval() -> None:
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200)))
+    session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(expire_on_commit=False)
+
+    scheduler = build_scheduler(client, session_factory)
+
+    job = scheduler.get_job(_AMERIABANK_JOB_ID)
+    assert job is not None
+    assert isinstance(job.trigger, IntervalTrigger)
+    assert (
+        job.trigger.interval.total_seconds()
+        == get_settings().ameriabank_collection_interval_minutes * 60
     )

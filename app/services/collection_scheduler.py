@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.collectors.ameriabank import AmeriabankCollector
 from app.collectors.base import RateCollector, RatePoint
 from app.collectors.cba import CBACollector
 from app.collectors.cbr import CBRCollector
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _CBA_JOB_ID = "cba_collection"
 _CBR_JOB_ID = "cbr_collection"
+_AMERIABANK_JOB_ID = "ameriabank_collection"
 
 
 async def run_collection(service: RateService, collector: RateCollector) -> list[RatePoint] | None:
@@ -70,6 +72,16 @@ def build_scheduler(
         trigger=IntervalTrigger(minutes=settings.cbr_collection_interval_minutes),
         args=(client, session_factory, CBRCollector),
         id=_CBR_JOB_ID,
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=60,
+    )
+    scheduler.add_job(
+        _run_scheduled_collection,
+        trigger=IntervalTrigger(minutes=settings.ameriabank_collection_interval_minutes),
+        args=(client, session_factory, AmeriabankCollector),
+        id=_AMERIABANK_JOB_ID,
         next_run_time=datetime.now(UTC),
         max_instances=1,
         coalesce=True,
