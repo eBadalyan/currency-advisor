@@ -32,7 +32,7 @@ class RecommendationService:
         self._analytics = analytics
         self._strategy = strategy
 
-    async def get_recommendation(self, *, window: int = 30) -> Recommendation | None:
+    async def get_recommendation(self, *, window_days: int = 30) -> Recommendation | None:
         official_rate = await self._repository.get_latest(
             CBA_SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY
         )
@@ -40,7 +40,7 @@ class RecommendationService:
             return None
 
         indicators = await self._analytics.get_indicators(
-            CBA_SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY, window=window
+            CBA_SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY, window_days=window_days
         )
         synthetic_rate = await self._get_synthetic_rate()
         deviation = self._deviation_percent(official_rate.value, synthetic_rate)

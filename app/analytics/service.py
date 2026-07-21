@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.analytics.indicators import (
@@ -12,6 +13,16 @@ from app.analytics.indicators import (
 )
 from app.collectors.base import RatePoint
 from app.repositories.exchange_rate import ExchangeRateRepository
+
+# Repository.list_history()'s `limit` is a hard safety cap applied alongside
+# `since` below, not the real bound — `since` is what actually determines the
+# window. Comfortably above what any realistic per-source collection
+# frequency would produce within a multi-month window.
+_MAX_HISTORY_ROWS = 10_000
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,10 +46,15 @@ class AnalyticsService:
         self._repository = repository
 
     async def get_indicators(
-        self, source: str, base_currency: str, quote_currency: str, *, window: int = 30
+        self, source: str, base_currency: str, quote_currency: str, *, window_days: int = 30
     ) -> RateIndicators:
+        # A calendar-day window, not a row count: sources collect at very
+        # different frequencies (CBA effectively once/day vs. the bank
+        # sources every scheduler tick), so a row-count LIMIT would silently
+        # mean a different span of time per source.
+        since = _utcnow() - timedelta(days=window_days)
         history = await self._repository.list_history(
-            source, base_currency, quote_currency, limit=window
+            source, base_currency, quote_currency, since=since, limit=_MAX_HISTORY_ROWS
         )
         # list_history() is newest-first; indicators expect chronological order.
         points = list(reversed(history))
