@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analytics.service import AnalyticsService
@@ -15,6 +16,14 @@ from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
 
 _START = datetime(2026, 7, 1, 20, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def _frozen_now(monkeypatch: pytest.MonkeyPatch) -> None:
+    # AnalyticsService.get_indicators' window is calendar-day-relative to
+    # "now" — freeze it to _START so the fixed _START-anchored fixtures below
+    # stay meaningful regardless of which day the suite runs.
+    monkeypatch.setattr("app.analytics.service._utcnow", lambda: _START)
 
 
 def _cba_rub_amd(value: str, day_offset: int) -> RatePoint:
@@ -95,7 +104,7 @@ async def test_get_recommendation_reflects_upward_deviation_from_history(
     await repository.bulk_save(history)
     service = _make_service(repository)
 
-    recommendation = await service.get_recommendation(window=4)
+    recommendation = await service.get_recommendation(window_days=4)
 
     assert recommendation is not None
     assert recommendation.action.value == "exchange_now"
