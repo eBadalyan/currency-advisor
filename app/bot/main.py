@@ -20,6 +20,7 @@ from app.recommendations.rule_based import RuleBasedRecommendationStrategy
 from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
+from app.services.collector_health_service import CollectorHealthService, SourceHealth
 from app.services.rate_service import RateService
 
 _BASE_CURRENCY = "RUB"
@@ -48,7 +49,8 @@ async def start(message: Message) -> None:
         "Currency Advisor отслеживает курс RUB/AMD по данным ЦБ Армении.\n"
         "Команда /rate — последний известный курс.\n"
         "Команда /banks — курс наличной покупки RUB в банках.\n"
-        "Команда /advice — менять сейчас или подождать, и почему."
+        "Команда /advice — менять сейчас или подождать, и почему.\n"
+        "Команда /status — актуальность данных по каждому источнику."
     )
 
 
@@ -116,6 +118,31 @@ async def advice(message: Message) -> None:
             repository, AnalyticsService(repository), RuleBasedRecommendationStrategy()
         )
         reply = await format_advice_reply(service)
+    await message.answer(reply)
+
+
+def _format_source_status(status: SourceHealth) -> str:
+    pair = f"{status.base_currency}/{status.quote_currency}"
+    if status.last_observed_at is None:
+        state = "нет данных"
+    else:
+        timestamp = f"{status.last_observed_at:%Y-%m-%d %H:%M} UTC"
+        state = f"устарело (последний раз {timestamp})" if status.is_stale else f"ок ({timestamp})"
+    return f"- {status.source} ({pair}): {state}"
+
+
+async def format_status_reply(service: CollectorHealthService) -> str:
+    statuses = await service.get_status()
+    lines = ["Статус источников данных:"]
+    lines.extend(_format_source_status(status) for status in statuses)
+    return "\n".join(lines)
+
+
+@dp.message(Command("status"))
+async def status(message: Message) -> None:
+    async with SessionFactory() as session:
+        service = CollectorHealthService(ExchangeRateRepository(session))
+        reply = await format_status_reply(service)
     await message.answer(reply)
 
 
