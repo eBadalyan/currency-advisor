@@ -9,10 +9,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.collectors.acba_bank import AcbaBankCollector
 from app.collectors.ameriabank import AmeriabankCollector
 from app.collectors.base import RateCollector, RatePoint
 from app.collectors.cba import CBACollector
 from app.collectors.cbr import CBRCollector
+from app.collectors.evocabank import EvocabankCollector
+from app.collectors.vtb_am import VtbArmeniaCollector
 from app.core.config import get_settings
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.rate_service import RateService
@@ -22,6 +25,9 @@ logger = logging.getLogger(__name__)
 _CBA_JOB_ID = "cba_collection"
 _CBR_JOB_ID = "cbr_collection"
 _AMERIABANK_JOB_ID = "ameriabank_collection"
+_EVOCABANK_JOB_ID = "evocabank_collection"
+_ACBA_BANK_JOB_ID = "acba_bank_collection"
+_VTB_AM_JOB_ID = "vtb_am_collection"
 
 
 async def run_collection(service: RateService, collector: RateCollector) -> list[RatePoint] | None:
@@ -57,34 +63,23 @@ def build_scheduler(
 ) -> AsyncIOScheduler:
     settings = get_settings()
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(
-        _run_scheduled_collection,
-        trigger=IntervalTrigger(minutes=settings.cba_collection_interval_minutes),
-        args=(client, session_factory, CBACollector),
-        id=_CBA_JOB_ID,
-        next_run_time=datetime.now(UTC),
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=60,
+    jobs: tuple[tuple[str, int, Callable[[httpx.AsyncClient], RateCollector]], ...] = (
+        (_CBA_JOB_ID, settings.cba_collection_interval_minutes, CBACollector),
+        (_CBR_JOB_ID, settings.cbr_collection_interval_minutes, CBRCollector),
+        (_AMERIABANK_JOB_ID, settings.ameriabank_collection_interval_minutes, AmeriabankCollector),
+        (_EVOCABANK_JOB_ID, settings.evocabank_collection_interval_minutes, EvocabankCollector),
+        (_ACBA_BANK_JOB_ID, settings.acba_bank_collection_interval_minutes, AcbaBankCollector),
+        (_VTB_AM_JOB_ID, settings.vtb_am_collection_interval_minutes, VtbArmeniaCollector),
     )
-    scheduler.add_job(
-        _run_scheduled_collection,
-        trigger=IntervalTrigger(minutes=settings.cbr_collection_interval_minutes),
-        args=(client, session_factory, CBRCollector),
-        id=_CBR_JOB_ID,
-        next_run_time=datetime.now(UTC),
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=60,
-    )
-    scheduler.add_job(
-        _run_scheduled_collection,
-        trigger=IntervalTrigger(minutes=settings.ameriabank_collection_interval_minutes),
-        args=(client, session_factory, AmeriabankCollector),
-        id=_AMERIABANK_JOB_ID,
-        next_run_time=datetime.now(UTC),
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=60,
-    )
+    for job_id, interval_minutes, collector_factory in jobs:
+        scheduler.add_job(
+            _run_scheduled_collection,
+            trigger=IntervalTrigger(minutes=interval_minutes),
+            args=(client, session_factory, collector_factory),
+            id=job_id,
+            next_run_time=datetime.now(UTC),
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=60,
+        )
     return scheduler

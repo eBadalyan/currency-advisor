@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import httpx
+import pytest
 from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -11,9 +12,12 @@ from app.collectors.base import RateCollector, RatePoint
 from app.core.config import get_settings
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.collection_scheduler import (
+    _ACBA_BANK_JOB_ID,
     _AMERIABANK_JOB_ID,
     _CBA_JOB_ID,
     _CBR_JOB_ID,
+    _EVOCABANK_JOB_ID,
+    _VTB_AM_JOB_ID,
     build_scheduler,
     run_collection,
 )
@@ -59,7 +63,20 @@ async def test_run_collection_returns_none_and_does_not_raise_on_failure(
     assert result is None
 
 
-def test_build_scheduler_registers_cba_job_with_configured_interval() -> None:
+@pytest.mark.parametrize(
+    ("job_id", "interval_settings_attr"),
+    [
+        (_CBA_JOB_ID, "cba_collection_interval_minutes"),
+        (_CBR_JOB_ID, "cbr_collection_interval_minutes"),
+        (_AMERIABANK_JOB_ID, "ameriabank_collection_interval_minutes"),
+        (_EVOCABANK_JOB_ID, "evocabank_collection_interval_minutes"),
+        (_ACBA_BANK_JOB_ID, "acba_bank_collection_interval_minutes"),
+        (_VTB_AM_JOB_ID, "vtb_am_collection_interval_minutes"),
+    ],
+)
+def test_build_scheduler_registers_job_with_configured_interval(
+    job_id: str, interval_settings_attr: str
+) -> None:
     client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200)))
     session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(expire_on_commit=False)
 
@@ -67,38 +84,8 @@ def test_build_scheduler_registers_cba_job_with_configured_interval() -> None:
     # execution, so there is nothing running to shut down afterwards.
     scheduler = build_scheduler(client, session_factory)
 
-    job = scheduler.get_job(_CBA_JOB_ID)
+    job = scheduler.get_job(job_id)
     assert job is not None
     assert isinstance(job.trigger, IntervalTrigger)
-    assert (
-        job.trigger.interval.total_seconds() == get_settings().cba_collection_interval_minutes * 60
-    )
-
-
-def test_build_scheduler_registers_cbr_job_with_configured_interval() -> None:
-    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200)))
-    session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(expire_on_commit=False)
-
-    scheduler = build_scheduler(client, session_factory)
-
-    job = scheduler.get_job(_CBR_JOB_ID)
-    assert job is not None
-    assert isinstance(job.trigger, IntervalTrigger)
-    assert (
-        job.trigger.interval.total_seconds() == get_settings().cbr_collection_interval_minutes * 60
-    )
-
-
-def test_build_scheduler_registers_ameriabank_job_with_configured_interval() -> None:
-    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200)))
-    session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(expire_on_commit=False)
-
-    scheduler = build_scheduler(client, session_factory)
-
-    job = scheduler.get_job(_AMERIABANK_JOB_ID)
-    assert job is not None
-    assert isinstance(job.trigger, IntervalTrigger)
-    assert (
-        job.trigger.interval.total_seconds()
-        == get_settings().ameriabank_collection_interval_minutes * 60
-    )
+    expected_minutes = getattr(get_settings(), interval_settings_attr)
+    assert job.trigger.interval.total_seconds() == expected_minutes * 60
