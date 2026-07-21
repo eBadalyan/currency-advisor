@@ -39,3 +39,5 @@ class RecommendationContext:
     indicators: RateIndicators
     synthetic_rate: Decimal | None
     source_deviation_percent: Decimal | None
+    bank_median_rate: Decimal | None
+    bank_rate_deviation_percent: Decimal | None

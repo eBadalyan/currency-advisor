@@ -46,6 +46,8 @@ def _context(
     sample_size: int = 30,
     synthetic_rate: str | None = None,
     source_deviation_percent: str | None = None,
+    bank_median_rate: str | None = None,
+    bank_rate_deviation_percent: str | None = None,
 ) -> RecommendationContext:
     return RecommendationContext(
         official_rate=_official_rate(official_value),
@@ -58,6 +60,12 @@ def _context(
         synthetic_rate=Decimal(synthetic_rate) if synthetic_rate is not None else None,
         source_deviation_percent=(
             Decimal(source_deviation_percent) if source_deviation_percent is not None else None
+        ),
+        bank_median_rate=Decimal(bank_median_rate) if bank_median_rate is not None else None,
+        bank_rate_deviation_percent=(
+            Decimal(bank_rate_deviation_percent)
+            if bank_rate_deviation_percent is not None
+            else None
         ),
     )
 
@@ -154,6 +162,39 @@ def test_summary_always_notes_no_future_prediction() -> None:
     recommendation = _STRATEGY.evaluate(_context())
 
     assert "не предсказывает будущее" in recommendation.summary
+
+
+def test_missing_bank_rate_reports_not_yet_collected() -> None:
+    recommendation = _STRATEGY.evaluate(_context(bank_median_rate=None))
+
+    factor = next(f for f in recommendation.factors if f.name == "bank_market_rate")
+    assert "пока не собраны" in factor.explanation
+    assert factor.weight == Decimal(0)
+
+
+def test_bank_rate_factor_never_affects_confidence_or_action() -> None:
+    without_bank_data = _context(
+        official_value="5.0", moving_average="4.6", rate_change_percent="5"
+    )
+    with_bank_data = _context(
+        official_value="5.0",
+        moving_average="4.6",
+        rate_change_percent="5",
+        bank_median_rate="3.75",
+        bank_rate_deviation_percent="24.4",
+    )
+
+    without_result = _STRATEGY.evaluate(without_bank_data)
+    with_result = _STRATEGY.evaluate(with_bank_data)
+
+    assert without_result.action == with_result.action
+    assert without_result.confidence == with_result.confidence
+    factor = next(f for f in with_result.factors if f.name == "bank_market_rate")
+    assert factor.weight == Decimal(0)
+    assert factor.value == Decimal(0)
+    assert "3.75" in factor.explanation
+    assert "24.4" in factor.explanation
+    assert "выше банковского" in factor.explanation
 
 
 def test_pluralize_points_handles_russian_numeral_agreement() -> None:
