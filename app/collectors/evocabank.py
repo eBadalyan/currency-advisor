@@ -14,35 +14,33 @@ from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-SOURCE_NAME = "Ameriabank"
+SOURCE_NAME = "Evocabank"
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
 
-# The rates widget is rendered server-side by an ASP.NET/DNN module whose
-# element id has a per-deployment numeric prefix (e.g. "dnn_ctr16862_View_grdRates")
-# — matching on the stable suffix instead of the full id survives that prefix
-# changing across page reloads/deploys.
-_RATES_TABLE_ID_SUFFIX = "grdRates"
+# Evocabank renders separate Cash and Non-Cash tables on the same page
+# (verified live), each with class "exchange__table" — Cash is the one
+# without the "dn" (display:none) wrapper class and appears first in the
+# document, which is also the first one HtmlRateRowParser stops at.
+_RATES_TABLE_CLASS = "exchange__table"
 
 
 def _is_rates_table(attrs: dict[str, str | None]) -> bool:
-    return (attrs.get("id") or "").endswith(_RATES_TABLE_ID_SUFFIX)
+    return _RATES_TABLE_CLASS in (attrs.get("class") or "").split()
 
 
-# Table columns are [currency, cash buy, cash sell, non-cash(card) buy, non-cash sell].
-# Column 1 (cash buy) is what a person actually receives handing over physical
-# RUB at a bank counter — the real-world number this product cares about, as
-# opposed to CBA/CBR's official reference rates.
+# Table columns are [currency, cash buy, cash sell]. Column 1 (buy) is what a
+# person actually receives handing over physical RUB at a bank counter.
 _CASH_BUY_COLUMN = 1
 
 
-class AmeriabankCollector(RateCollector):
-    """Real bank cash exchange rate for RUB/AMD, scraped from Ameriabank's
-    public rates widget.
+class EvocabankCollector(RateCollector):
+    """Real bank cash exchange rate for RUB/AMD, scraped from Evocabank's
+    public rates widget (no JSON/XML API is published — verified live).
 
-    Unlike CBA/CBR's once-daily official reference rates, this reflects what
-    a person actually gets at a bank counter and can move intraday, so
-    observed_at is the fetch time rather than a calendar-day fix.
+    Same reasoning as AmeriabankCollector: this tracks what a person
+    actually gets exchanging cash, which can move intraday, so observed_at
+    is the fetch time rather than a calendar-day fix.
     """
 
     def __init__(
@@ -55,12 +53,12 @@ class AmeriabankCollector(RateCollector):
     ) -> None:
         settings = get_settings()
         self._client = client
-        self._base_url = base_url or settings.ameriabank_base_url
+        self._base_url = base_url or settings.evocabank_base_url
         self._timeout_seconds = (
-            timeout_seconds if timeout_seconds is not None else settings.ameriabank_timeout_seconds
+            timeout_seconds if timeout_seconds is not None else settings.evocabank_timeout_seconds
         )
         self._max_retries = (
-            max_retries if max_retries is not None else settings.ameriabank_max_retries
+            max_retries if max_retries is not None else settings.evocabank_max_retries
         )
 
     async def collect(self) -> list[RatePoint]:
@@ -76,31 +74,27 @@ class AmeriabankCollector(RateCollector):
         raise AssertionError("unreachable: AsyncRetrying always raises or returns")
 
     async def _request_rate(self) -> RatePoint:
-        logger.info("ameriabank_collector.request")
+        logger.info("evocabank_collector.request")
         try:
-            # The homepage issues a DNN splash-page redirect (verified live)
-            # before reaching the page that actually renders the rates
-            # widget — explicit per-request follow_redirects, since the
-            # shared httpx.AsyncClient the app constructs doesn't enable it.
             response = await self._client.get(
                 self._base_url, timeout=self._timeout_seconds, follow_redirects=True
             )
         except httpx.TimeoutException as exc:
-            logger.warning("ameriabank_collector.timeout")
-            raise CollectorTimeoutError("Ameriabank request timed out") from exc
+            logger.warning("evocabank_collector.timeout")
+            raise CollectorTimeoutError("Evocabank request timed out") from exc
         except httpx.HTTPError as exc:
-            logger.warning("ameriabank_collector.transport_error", extra={"error": str(exc)})
-            raise CollectorResponseError(f"Ameriabank request failed: {exc}") from exc
+            logger.warning("evocabank_collector.transport_error", extra={"error": str(exc)})
+            raise CollectorResponseError(f"Evocabank request failed: {exc}") from exc
 
         if response.status_code >= 400:
             logger.warning(
-                "ameriabank_collector.http_error",
+                "evocabank_collector.http_error",
                 extra={"status_code": response.status_code},
             )
-            raise CollectorResponseError(f"Ameriabank returned HTTP {response.status_code}")
+            raise CollectorResponseError(f"Evocabank returned HTTP {response.status_code}")
 
         point = self._parse_rate(response.text)
-        logger.info("ameriabank_collector.success", extra={"value": str(point.value)})
+        logger.info("evocabank_collector.success", extra={"value": str(point.value)})
         return point
 
     def _parse_rate(self, html: str) -> RatePoint:
@@ -109,18 +103,18 @@ class AmeriabankCollector(RateCollector):
 
         row = parser.row
         if row is None or len(row) <= _CASH_BUY_COLUMN:
-            raise CollectorResponseError("Ameriabank response has no RUB rate row")
+            raise CollectorResponseError("Evocabank response has no RUB rate row")
 
         value_text = row[_CASH_BUY_COLUMN]
         try:
             value = Decimal(value_text)
         except InvalidOperation as exc:
             raise CollectorResponseError(
-                f"Ameriabank returned an unparsable RUB rate: {value_text!r}"
+                f"Evocabank returned an unparsable RUB rate: {value_text!r}"
             ) from exc
 
         if value <= 0:
-            raise CollectorResponseError(f"Ameriabank returned a non-positive RUB rate: {value}")
+            raise CollectorResponseError(f"Evocabank returned a non-positive RUB rate: {value}")
 
         return RatePoint(
             source=SOURCE_NAME,
