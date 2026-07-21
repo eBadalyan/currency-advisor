@@ -10,7 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.collectors.base import RateCollector, RatePoint
 from app.core.config import get_settings
 from app.repositories.exchange_rate import ExchangeRateRepository
-from app.services.collection_scheduler import _CBA_JOB_ID, build_scheduler, run_collection
+from app.services.collection_scheduler import (
+    _CBA_JOB_ID,
+    _CBR_JOB_ID,
+    build_scheduler,
+    run_collection,
+)
 from app.services.rate_service import RateService
 
 _POINT = RatePoint(
@@ -66,4 +71,18 @@ def test_build_scheduler_registers_cba_job_with_configured_interval() -> None:
     assert isinstance(job.trigger, IntervalTrigger)
     assert (
         job.trigger.interval.total_seconds() == get_settings().cba_collection_interval_minutes * 60
+    )
+
+
+def test_build_scheduler_registers_cbr_job_with_configured_interval() -> None:
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200)))
+    session_factory: async_sessionmaker[AsyncSession] = async_sessionmaker(expire_on_commit=False)
+
+    scheduler = build_scheduler(client, session_factory)
+
+    job = scheduler.get_job(_CBR_JOB_ID)
+    assert job is not None
+    assert isinstance(job.trigger, IntervalTrigger)
+    assert (
+        job.trigger.interval.total_seconds() == get_settings().cbr_collection_interval_minutes * 60
     )
