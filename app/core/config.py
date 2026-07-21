@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     ameriabank_max_retries: int = 3
     ameriabank_collection_interval_minutes: int = 30
 
+    evocabank_base_url: str = "https://www.evoca.am/en"
+    evocabank_timeout_seconds: float = 10.0
+    evocabank_max_retries: int = 3
+    evocabank_collection_interval_minutes: int = 30
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
