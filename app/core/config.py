@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     cbr_base_url: str = "https://www.cbr.ru/scripts/XML_daily.asp"
     cbr_timeout_seconds: float = 10.0
     cbr_max_retries: int = 3
+    cbr_collection_interval_minutes: int = 30
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
