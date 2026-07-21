@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: currency
       POSTGRES_USER: currency
@@ -17,6 +18,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     env_file: .env
     environment:
       # .env's DATABASE_URL is host-oriented (127.0.0.1:5433, for running
@@ -26,6 +28,17 @@ services:
       DATABASE_URL: postgresql+asyncpg://currency:currency@postgres:5432/currency
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://currency:currency@postgres:5432/currency
+    command: ["uv", "run", "python", "-m", "app.bot.main"]
     depends_on:
       postgres:
         condition: service_healthy
