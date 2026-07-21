@@ -3,15 +3,18 @@ name = "currency-advisor"
 version = "0.1.0"
 description = "RUB/AMD market data and recommendation platform"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 dependencies = [
   "aiogram>=3.20,<4",
   "alembic>=1.14,<2",
+  "apscheduler>=3.11.3",
   "asyncpg>=0.30,<1",
   "fastapi>=0.115,<1",
   "httpx>=0.28,<1",
   "pydantic-settings>=2.7,<3",
   "sqlalchemy[asyncio]>=2.0,<3",
+  "tenacity>=9.1.4",
+  "tzdata>=2026.3",
   "uvicorn[standard]>=0.34,<1",
 ]
 
@@ -26,19 +29,34 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# The app's DB engine (app/db/session.py) is a module-level singleton
+# created once at import time. A fresh event loop per test (pytest-asyncio's
+# default) leaves its pooled connections bound to a loop that later tests'
+# loops don't share, which asyncpg/SQLAlchemy surface as "Event loop is
+# closed" on connection teardown. One event loop for the whole session
+# keeps that singleton valid throughout the run.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Body"]
+
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "apscheduler.*"
+ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 include = ["app*"]

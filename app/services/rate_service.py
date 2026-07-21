@@ -1,40 +1,35 @@
-from dataclasses import dataclass
-from decimal import Decimal
+from __future__ import annotations
 
-from app.providers.base import QuoteProvider
+import logging
 
+from app.collectors.base import RateCollector, RatePoint
+from app.repositories.exchange_rate import ExchangeRateRepository
 
-@dataclass(frozen=True, slots=True)
-class RateSnapshot:
-    official_rub_amd: Decimal
-    market_usd_rub: Decimal | None
-    official_usd_amd: Decimal
-    synthetic_rub_amd: Decimal | None
-    deviation_percent: Decimal | None
+logger = logging.getLogger(__name__)
 
 
 class RateService:
-    def __init__(self, cba: QuoteProvider, market: QuoteProvider | None = None) -> None:
-        self._cba = cba
-        self._market = market
+    """Connects the Repository to Collectors (write path) and to callers
+    that need a business-facing read (currently just the Bot — the API
+    reads straight through the Repository instead, since its routes add
+    no logic on top of a plain lookup).
 
-    async def snapshot(self) -> RateSnapshot:
-        rub_amd = await self._cba.get_quote("RUB/AMD")
-        usd_amd = await self._cba.get_quote("USD/AMD")
+    Takes the collector as a parameter rather than binding one at
+    construction time, so a single service instance can run any
+    RateCollector implementation (CBA today, further sources later)
+    without changes here.
+    """
 
-        usd_rub_value: Decimal | None = None
-        synthetic: Decimal | None = None
-        deviation: Decimal | None = None
-        if self._market is not None:
-            usd_rub = await self._market.get_quote("USD/RUB")
-            usd_rub_value = usd_rub.price
-            synthetic = usd_amd.price / usd_rub.price
-            deviation = (rub_amd.price / synthetic - Decimal(1)) * Decimal(100)
+    def __init__(self, repository: ExchangeRateRepository) -> None:
+        self._repository = repository
 
-        return RateSnapshot(
-            official_rub_amd=rub_amd.price,
-            market_usd_rub=usd_rub_value,
-            official_usd_amd=usd_amd.price,
-            synthetic_rub_amd=synthetic,
-            deviation_percent=deviation,
-        )
+    async def collect_and_save(self, collector: RateCollector) -> list[RatePoint]:
+        points = await collector.collect()
+        await self._repository.bulk_save(points)
+        logger.info("rate_service.collect_and_save", extra={"count": len(points)})
+        return points
+
+    async def get_latest_rate(
+        self, source: str, base_currency: str, quote_currency: str
+    ) -> RatePoint | None:
+        return await self._repository.get_latest(source, base_currency, quote_currency)
