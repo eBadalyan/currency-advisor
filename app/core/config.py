@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     evocabank_max_retries: int = 3
     evocabank_collection_interval_minutes: int = 30
 
+    acba_bank_base_url: str = "https://www.acba.am/en/exchange-rates"
+    acba_bank_timeout_seconds: float = 10.0
+    acba_bank_max_retries: int = 3
+    acba_bank_collection_interval_minutes: int = 30
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
 
