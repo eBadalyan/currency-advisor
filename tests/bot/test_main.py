@@ -14,8 +14,10 @@ from app.bot.main import (
     format_advice_reply,
     format_banks_reply,
     format_rate_reply,
+    format_status_reply,
     rate,
     start,
+    status,
 )
 from app.collectors.acba_bank import SOURCE_NAME as ACBA_BANK_SOURCE_NAME
 from app.collectors.ameriabank import SOURCE_NAME as AMERIABANK_SOURCE_NAME
@@ -27,6 +29,7 @@ from app.recommendations.rule_based import RuleBasedRecommendationStrategy
 from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
+from app.services.collector_health_service import CollectorHealthService
 from app.services.rate_service import RateService
 
 _OBSERVED_AT = datetime(2026, 7, 19, 20, 0, tzinfo=UTC)
@@ -192,3 +195,41 @@ async def test_advice_handler_replies_with_formatted_recommendation(
 
     message.answer.assert_awaited_once()
     assert "не предсказывает будущее" in message.answer.call_args.args[0]
+
+
+async def test_format_status_reply_lists_every_tracked_source(db_session: AsyncSession) -> None:
+    service = CollectorHealthService(ExchangeRateRepository(db_session))
+
+    reply = await format_status_reply(service)
+
+    assert "Статус источников данных:" in reply
+    assert f"- {SOURCE_NAME} (RUB/AMD): нет данных" in reply
+    assert f"- {AMERIABANK_SOURCE_NAME} (RUB/AMD): нет данных" in reply
+
+
+async def test_format_status_reply_shows_fresh_source_as_ok(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("app.services.collector_health_service._utcnow", lambda: _OBSERVED_AT)
+    await ExchangeRateRepository(db_session).save(_rate_point("4.6651"))
+    service = CollectorHealthService(ExchangeRateRepository(db_session))
+
+    reply = await format_status_reply(service)
+
+    assert f"- {SOURCE_NAME} (RUB/AMD): ок (2026-07-19 20:00 UTC)" in reply
+
+
+async def test_status_handler_replies_with_formatted_status(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.bot.main.SessionFactory", test_session_factory)
+    monkeypatch.setattr("app.services.collector_health_service._utcnow", lambda: _OBSERVED_AT)
+    await ExchangeRateRepository(db_session).save(_rate_point("4.6651"))
+    message = AsyncMock()
+
+    await status(message)
+
+    message.answer.assert_awaited_once()
+    assert "Статус источников данных:" in message.answer.call_args.args[0]
