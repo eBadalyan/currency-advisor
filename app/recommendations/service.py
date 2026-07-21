@@ -8,6 +8,7 @@ from app.collectors.cbr import SOURCE_NAME as CBR_SOURCE_NAME
 from app.recommendations.models import Recommendation, RecommendationContext
 from app.recommendations.strategy import RecommendationStrategy
 from app.repositories.exchange_rate import ExchangeRateRepository
+from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
 
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
@@ -44,11 +45,19 @@ class RecommendationService:
         synthetic_rate = await self._get_synthetic_rate()
         deviation = self._deviation_percent(official_rate.value, synthetic_rate)
 
+        bank_point = await self._repository.get_latest(
+            BANK_AVERAGE_SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY
+        )
+        bank_median_rate = bank_point.value if bank_point is not None else None
+        bank_deviation = self._deviation_percent(official_rate.value, bank_median_rate)
+
         context = RecommendationContext(
             official_rate=official_rate,
             indicators=indicators,
             synthetic_rate=synthetic_rate,
             source_deviation_percent=deviation,
+            bank_median_rate=bank_median_rate,
+            bank_rate_deviation_percent=bank_deviation,
         )
         return self._strategy.evaluate(context)
 

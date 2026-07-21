@@ -12,6 +12,7 @@ from app.collectors.cbr import SOURCE_NAME as CBR_SOURCE_NAME
 from app.recommendations.rule_based import RuleBasedRecommendationStrategy
 from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
+from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
 
 _START = datetime(2026, 7, 1, 20, 0, tzinfo=UTC)
 
@@ -28,6 +29,10 @@ def _cba_usd_amd(value: str) -> RatePoint:
 
 def _cbr_usd_rub(value: str) -> RatePoint:
     return RatePoint(CBR_SOURCE_NAME, "USD", "RUB", Decimal(value), _START)
+
+
+def _bank_average_rub_amd(value: str) -> RatePoint:
+    return RatePoint(BANK_AVERAGE_SOURCE_NAME, "RUB", "AMD", Decimal(value), _START)
 
 
 def _make_service(repository: ExchangeRateRepository) -> RecommendationService:
@@ -94,3 +99,31 @@ async def test_get_recommendation_reflects_upward_deviation_from_history(
 
     assert recommendation is not None
     assert recommendation.action.value == "exchange_now"
+
+
+async def test_get_recommendation_includes_bank_market_rate_factor(
+    db_session: AsyncSession,
+) -> None:
+    repository = ExchangeRateRepository(db_session)
+    await repository.bulk_save([_cba_rub_amd("4.6651", 0), _bank_average_rub_amd("3.75")])
+    service = _make_service(repository)
+
+    recommendation = await service.get_recommendation()
+
+    assert recommendation is not None
+    factor = next(f for f in recommendation.factors if f.name == "bank_market_rate")
+    assert "3.75" in factor.explanation
+
+
+async def test_get_recommendation_without_bank_data_has_not_yet_collected_factor(
+    db_session: AsyncSession,
+) -> None:
+    repository = ExchangeRateRepository(db_session)
+    await repository.save(_cba_rub_amd("4.6651", 0))
+    service = _make_service(repository)
+
+    recommendation = await service.get_recommendation()
+
+    assert recommendation is not None
+    factor = next(f for f in recommendation.factors if f.name == "bank_market_rate")
+    assert "пока не собраны" in factor.explanation

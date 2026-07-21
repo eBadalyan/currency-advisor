@@ -70,6 +70,7 @@ class RuleBasedRecommendationStrategy(RecommendationStrategy):
         deviation_score = self._deviation_from_average_factor(context, factors)
         trend_score = self._trend_factor(context, factors)
         confidence = self._confidence(context, factors)
+        self._bank_market_rate_factor(context, factors)
 
         directional_score = (
             deviation_score * _MOVING_AVERAGE_DEVIATION_WEIGHT + trend_score * _TREND_WEIGHT
@@ -144,6 +145,51 @@ class RuleBasedRecommendationStrategy(RecommendationStrategy):
             )
         )
         return score
+
+    @staticmethod
+    def _bank_market_rate_factor(
+        context: RecommendationContext, factors: list[RecommendationFactor]
+    ) -> None:
+        """Informational only: weight=0 and never touches confidence.
+
+        The official rate has years of history to judge "favorable relative
+        to recent history" against; the bank median only started
+        accumulating recently and can't yet support a trend/moving-average
+        of its own (see ROADMAP.md). Surfacing it as plain context — what a
+        person actually gets in cash — without pretending it drives the
+        action or confidence math would be overclaiming precision the data
+        doesn't support yet.
+        """
+        bank_rate = context.bank_median_rate
+        if bank_rate is None:
+            factors.append(
+                RecommendationFactor(
+                    name="bank_market_rate",
+                    weight=Decimal(0),
+                    value=Decimal(0),
+                    explanation="Банковские курсы наличного обмена пока не собраны.",
+                )
+            )
+            return
+
+        deviation = context.bank_rate_deviation_percent
+        deviation_text = ""
+        if deviation is not None and deviation != 0:
+            direction = "выше" if deviation > 0 else "ниже"
+            deviation_text = f" — официальный курс {direction} банковского на {abs(deviation):.1f}%"
+
+        factors.append(
+            RecommendationFactor(
+                name="bank_market_rate",
+                weight=Decimal(0),
+                value=Decimal(0),
+                explanation=(
+                    f"По данным банков (медиана) курс наличной покупки RUB сейчас "
+                    f"{bank_rate}{deviation_text}. Именно этот курс вы фактически "
+                    "получите при обмене наличных, а не официальный курс ЦБ."
+                ),
+            )
+        )
 
     @staticmethod
     def _confidence(context: RecommendationContext, factors: list[RecommendationFactor]) -> Decimal:

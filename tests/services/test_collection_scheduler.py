@@ -14,6 +14,7 @@ from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.collection_scheduler import (
     _ACBA_BANK_JOB_ID,
     _AMERIABANK_JOB_ID,
+    _BANK_AVERAGE_JOB_ID,
     _CBA_JOB_ID,
     _CBR_JOB_ID,
     _EVOCABANK_JOB_ID,
@@ -72,6 +73,7 @@ async def test_run_collection_returns_none_and_does_not_raise_on_failure(
         (_EVOCABANK_JOB_ID, "evocabank_collection_interval_minutes"),
         (_ACBA_BANK_JOB_ID, "acba_bank_collection_interval_minutes"),
         (_VTB_AM_JOB_ID, "vtb_am_collection_interval_minutes"),
+        (_BANK_AVERAGE_JOB_ID, "bank_average_collection_interval_minutes"),
     ],
 )
 def test_build_scheduler_registers_job_with_configured_interval(
