@@ -35,6 +35,14 @@ class DeclineAlertService:
     market in Armenia is flow-driven/thin rather than arbitraged, so a
     confirmed decline is treated as likely to persist, not to revert. See
     docs/superpowers/specs/2026-07-24-decline-alert-design.md.
+
+    check() does a read (NotificationStateRepository.get) then a write
+    (NotificationStateRepository.save) as two separate DB round trips, not
+    one transaction. This is safe only because the caller (app/bot/main.py)
+    runs this job with max_instances=1 in a single bot process, so calls to
+    check() never run concurrently. Running multiple bot replicas, or
+    dropping max_instances=1, would introduce a race between the read and
+    the write.
     """
 
     def __init__(

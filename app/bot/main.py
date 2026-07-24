@@ -195,6 +195,13 @@ async def check_decline_and_notify(
                 SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY
             )
         text = format_decline_alert_message(alert, official_rate)
+        # Trade-off: service.check() already persisted last_alerted_value above,
+        # so delivery here is at-most-once, not exactly-once. If send_message fails
+        # (Telegram outage, network issue), this specific alert is silently dropped —
+        # it only re-fires on a further decline below this same floor. Accepted
+        # because the harm is bounded (a persistent decline keeps re-alerting on the
+        # next drop) and this is a single-admin, fixed-interval bot, not a system
+        # with a delivery guarantee.
         await bot.send_message(admin_chat_id, text)
     except Exception:
         logger.exception("decline_alert.check_failed")
