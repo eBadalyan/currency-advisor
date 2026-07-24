@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from datetime import UTC, datetime
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.analytics.service import AnalyticsService
 from app.collectors.acba_bank import SOURCE_NAME as ACBA_BANK_SOURCE_NAME
 from app.collectors.ameriabank import SOURCE_NAME as AMERIABANK_SOURCE_NAME
+from app.collectors.base import RatePoint
 from app.collectors.cba import SOURCE_NAME
 from app.collectors.evocabank import SOURCE_NAME as EVOCABANK_SOURCE_NAME
 from app.collectors.vtb_am import SOURCE_NAME as VTB_AM_SOURCE_NAME
@@ -19,8 +25,10 @@ from app.recommendations.models import RecommendationAction
 from app.recommendations.rule_based import RuleBasedRecommendationStrategy
 from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
+from app.repositories.notification_state_repository import NotificationStateRepository
 from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
 from app.services.collector_health_service import CollectorHealthService, SourceHealth
+from app.services.decline_alert_service import DeclineAlert, DeclineAlertService
 from app.services.rate_service import RateService
 
 _BASE_CURRENCY = "RUB"
@@ -39,6 +47,8 @@ _ACTION_LABELS = {
     RecommendationAction.WAIT: "Подождать",
     RecommendationAction.NEUTRAL: "Нет чёткой рекомендации",
 }
+
+logger = logging.getLogger(__name__)
 
 dp = Dispatcher()
 
@@ -146,13 +156,87 @@ async def status(message: Message) -> None:
     await message.answer(reply)
 
 
+def format_decline_alert_message(alert: DeclineAlert, official_rate: RatePoint | None) -> str:
+    lines = [
+        "⚠️ RUB слабеет",
+        (
+            f"Банковский курс наличной покупки RUB упал {alert.streak_length} раз подряд, "
+            f"сейчас {alert.current_value}."
+        ),
+    ]
+    if alert.previous_alerted_value is not None:
+        lines.append(
+            f"Ещё ниже, чем в прошлый раз я предупреждал ({alert.previous_alerted_value})."
+        )
+    if official_rate is not None:
+        lines.append(f"Официальный курс ЦБ Армении: {official_rate.value}.")
+    lines.append("Возможно, стоит разменять сейчас, пока не упал ещё ниже.")
+    return "\n".join(lines)
+
+
+async def check_decline_and_notify(
+    bot: Bot,
+    session_factory: async_sessionmaker[AsyncSession],
+    admin_chat_id: int,
+    streak_threshold: int,
+) -> None:
+    try:
+        async with session_factory() as session:
+            exchange_rates = ExchangeRateRepository(session)
+            service = DeclineAlertService(
+                exchange_rates,
+                NotificationStateRepository(session),
+                streak_threshold,
+            )
+            alert = await service.check()
+            if alert is None:
+                return
+            official_rate = await exchange_rates.get_latest(
+                SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY
+            )
+        text = format_decline_alert_message(alert, official_rate)
+        # Trade-off: service.check() already persisted last_alerted_value above,
+        # so delivery here is at-most-once, not exactly-once. If send_message fails
+        # (Telegram outage, network issue), this specific alert is silently dropped —
+        # it only re-fires on a further decline below this same floor. Accepted
+        # because the harm is bounded (a persistent decline keeps re-alerting on the
+        # next drop) and this is a single-admin, fixed-interval bot, not a system
+        # with a delivery guarantee.
+        await bot.send_message(admin_chat_id, text)
+    except Exception:
+        logger.exception("decline_alert.check_failed")
+
+
 async def main() -> None:
     configure_logging()
     settings = get_settings()
     if not settings.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is empty in .env")
+    if not settings.telegram_admin_chat_id:
+        raise RuntimeError("TELEGRAM_ADMIN_CHAT_ID is empty in .env")
     bot = Bot(settings.telegram_bot_token)
-    await dp.start_polling(bot)
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        check_decline_and_notify,
+        trigger=IntervalTrigger(minutes=settings.decline_alert_check_interval_minutes),
+        args=(
+            bot,
+            SessionFactory,
+            settings.telegram_admin_chat_id,
+            settings.decline_alert_streak_threshold,
+        ),
+        id="decline_alert_check",
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=60,
+    )
+    scheduler.start()
+    try:
+        await dp.start_polling(bot)
+    finally:
+        scheduler.shutdown(wait=False)
 
 
 if __name__ == "__main__":

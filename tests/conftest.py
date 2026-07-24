@@ -70,10 +70,11 @@ async def db_session(
     test_session_factory: async_sessionmaker[AsyncSession],
 ) -> AsyncIterator[AsyncSession]:
     """A session against the isolated test database, with exchange_rates
-    truncated before each test. Repository tests rely on Postgres-specific
-    behavior (ON CONFLICT), so they run against a real Postgres rather than
-    a mock — just not the dev one."""
+    and notification_states truncated before each test. Repository tests
+    rely on Postgres-specific behavior (ON CONFLICT), so they run against a
+    real Postgres rather than a mock — just not the dev one."""
     async with test_session_factory() as session:
         await session.execute(text("TRUNCATE TABLE exchange_rates RESTART IDENTITY"))
+        await session.execute(text("TRUNCATE TABLE notification_states RESTART IDENTITY"))
         await session.commit()
         yield session
