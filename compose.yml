@@ -16,6 +16,17 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build: .
+    restart: "no"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://currency:currency@postgres:5432/currency
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     build: .
     restart: unless-stopped
@@ -29,8 +40,8 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   bot:
     build: .
@@ -40,8 +51,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://currency:currency@postgres:5432/currency
     command: ["uv", "run", "python", "-m", "app.bot.main"]
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
