@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -11,8 +11,10 @@ from app.analytics.service import AnalyticsService
 from app.bot.main import (
     advice,
     banks,
+    check_decline_and_notify,
     format_advice_reply,
     format_banks_reply,
+    format_decline_alert_message,
     format_rate_reply,
     format_status_reply,
     rate,
@@ -30,6 +32,7 @@ from app.recommendations.service import RecommendationService
 from app.repositories.exchange_rate import ExchangeRateRepository
 from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
 from app.services.collector_health_service import CollectorHealthService
+from app.services.decline_alert_service import DeclineAlert
 from app.services.rate_service import RateService
 
 _OBSERVED_AT = datetime(2026, 7, 19, 20, 0, tzinfo=UTC)
@@ -233,3 +236,69 @@ async def test_status_handler_replies_with_formatted_status(
 
     message.answer.assert_awaited_once()
     assert "Статус источников данных:" in message.answer.call_args.args[0]
+
+
+def test_format_decline_alert_message_without_previous_alert_or_official_rate() -> None:
+    alert = DeclineAlert(
+        current_value=Decimal("3.72"), streak_length=2, previous_alerted_value=None
+    )
+
+    text = format_decline_alert_message(alert, official_rate=None)
+
+    assert "RUB слабеет" in text
+    assert "2 раз подряд" in text
+    assert "3.72" in text
+    assert "прошлый раз" not in text
+    assert "Официальный курс" not in text
+
+
+def test_format_decline_alert_message_with_previous_alert_and_official_rate() -> None:
+    alert = DeclineAlert(
+        current_value=Decimal("3.70"), streak_length=2, previous_alerted_value=Decimal("3.72")
+    )
+    official_rate = _rate_point("4.60")
+
+    text = format_decline_alert_message(alert, official_rate)
+
+    assert "прошлый раз я предупреждал (3.72)" in text
+    assert "Официальный курс ЦБ Армении: 4.60" in text
+
+
+async def test_check_decline_and_notify_sends_message_when_alert_fires(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    repository = ExchangeRateRepository(db_session)
+    await repository.save(_rate_point("4.60"))
+    bot = AsyncMock()
+
+    for value, minutes in (("3.76", 0), ("3.74", 30), ("3.72", 60)):
+        await repository.save(
+            RatePoint(
+                BANK_AVERAGE_SOURCE_NAME,
+                "RUB",
+                "AMD",
+                Decimal(value),
+                _OBSERVED_AT + timedelta(minutes=minutes),
+            )
+        )
+        await check_decline_and_notify(
+            bot, test_session_factory, admin_chat_id=42, streak_threshold=2
+        )
+
+    bot.send_message.assert_awaited_once()
+    call_args = bot.send_message.call_args
+    assert call_args.args[0] == 42
+    assert "3.72" in call_args.args[1]
+    assert "4.60" in call_args.args[1]
+
+
+async def test_check_decline_and_notify_does_not_send_when_no_alert(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    bot = AsyncMock()
+
+    await check_decline_and_notify(bot, test_session_factory, admin_chat_id=42, streak_threshold=2)
+
+    bot.send_message.assert_not_awaited()
