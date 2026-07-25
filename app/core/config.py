@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_admin_chat_id: int = 0
     decline_alert_streak_threshold: int = 2
-    decline_alert_check_interval_minutes: int = 30
+    alert_check_interval_minutes: int = 30
     rise_alert_streak_threshold: int = 2
 
     cba_base_url: str = "https://api.cba.am/exchangerates.asmx"
