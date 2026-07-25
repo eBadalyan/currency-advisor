@@ -9,13 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.analytics.service import AnalyticsService
 from app.bot.main import (
+    _times_word,
     advice,
     banks,
     check_decline_and_notify,
+    check_rise_and_notify,
     format_advice_reply,
     format_banks_reply,
     format_decline_alert_message,
     format_rate_reply,
+    format_rise_alert_message,
     format_status_reply,
     rate,
     start,
@@ -34,6 +37,7 @@ from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE
 from app.services.collector_health_service import CollectorHealthService
 from app.services.decline_alert_service import DeclineAlert
 from app.services.rate_service import RateService
+from app.services.rise_alert_service import RiseAlert
 
 _OBSERVED_AT = datetime(2026, 7, 19, 20, 0, tzinfo=UTC)
 
@@ -238,6 +242,27 @@ async def test_status_handler_replies_with_formatted_status(
     assert "Статус источников данных:" in message.answer.call_args.args[0]
 
 
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (1, "раз"),
+        (2, "раза"),
+        (3, "раза"),
+        (4, "раза"),
+        (5, "раз"),
+        (11, "раз"),
+        (12, "раз"),
+        (21, "раз"),
+        (22, "раза"),
+        (25, "раз"),
+        (111, "раз"),
+        (112, "раз"),
+    ],
+)
+def test_times_word_russian_pluralization(count: int, expected: str) -> None:
+    assert _times_word(count) == expected
+
+
 def test_format_decline_alert_message_without_previous_alert_or_official_rate() -> None:
     alert = DeclineAlert(
         current_value=Decimal("3.72"), streak_length=2, previous_alerted_value=None
@@ -246,7 +271,7 @@ def test_format_decline_alert_message_without_previous_alert_or_official_rate() 
     text = format_decline_alert_message(alert, official_rate=None)
 
     assert "RUB слабеет" in text
-    assert "2 раз подряд" in text
+    assert "2 раза подряд" in text
     assert "3.72" in text
     assert "прошлый раз" not in text
     assert "Официальный курс" not in text
@@ -300,5 +325,69 @@ async def test_check_decline_and_notify_does_not_send_when_no_alert(
     bot = AsyncMock()
 
     await check_decline_and_notify(bot, test_session_factory, admin_chat_id=42, streak_threshold=2)
+
+    bot.send_message.assert_not_awaited()
+
+
+def test_format_rise_alert_message_without_previous_alert_or_official_rate() -> None:
+    alert = RiseAlert(current_value=Decimal("3.80"), streak_length=2, previous_alerted_value=None)
+
+    text = format_rise_alert_message(alert, official_rate=None)
+
+    assert "RUB укрепляется" in text
+    assert "2 раза подряд" in text
+    assert "3.80" in text
+    assert "прошлый раз" not in text
+    assert "Официальный курс" not in text
+    assert "разменять" not in text
+
+
+def test_format_rise_alert_message_with_previous_alert_and_official_rate() -> None:
+    alert = RiseAlert(
+        current_value=Decimal("3.82"), streak_length=2, previous_alerted_value=Decimal("3.80")
+    )
+    official_rate = _rate_point("4.60")
+
+    text = format_rise_alert_message(alert, official_rate)
+
+    assert "прошлый раз я сообщал (3.80)" in text
+    assert "Официальный курс ЦБ Армении: 4.60" in text
+    assert "разменять" not in text
+
+
+async def test_check_rise_and_notify_sends_message_when_alert_fires(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    repository = ExchangeRateRepository(db_session)
+    await repository.save(_rate_point("4.60"))
+    bot = AsyncMock()
+
+    for value, minutes in (("3.72", 0), ("3.74", 30), ("3.76", 60)):
+        await repository.save(
+            RatePoint(
+                BANK_AVERAGE_SOURCE_NAME,
+                "RUB",
+                "AMD",
+                Decimal(value),
+                _OBSERVED_AT + timedelta(minutes=minutes),
+            )
+        )
+        await check_rise_and_notify(bot, test_session_factory, admin_chat_id=42, streak_threshold=2)
+
+    bot.send_message.assert_awaited_once()
+    call_args = bot.send_message.call_args
+    assert call_args.args[0] == 42
+    assert "3.76" in call_args.args[1]
+    assert "4.60" in call_args.args[1]
+
+
+async def test_check_rise_and_notify_does_not_send_when_no_alert(
+    db_session: AsyncSession,
+    test_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    bot = AsyncMock()
+
+    await check_rise_and_notify(bot, test_session_factory, admin_chat_id=42, streak_threshold=2)
 
     bot.send_message.assert_not_awaited()

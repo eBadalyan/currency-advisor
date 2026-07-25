@@ -15,7 +15,7 @@ from app.services.streak_detector import evaluate_streak
 
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
-_SIGNAL_NAME = "bank_average_decline"
+_SIGNAL_NAME = "bank_average_rise"
 
 
 def _utcnow() -> datetime:
@@ -23,34 +23,31 @@ def _utcnow() -> datetime:
 
 
 @dataclass(frozen=True, slots=True)
-class DeclineAlert:
+class RiseAlert:
     current_value: Decimal
     streak_length: int
     previous_alerted_value: Decimal | None
 
 
-class DeclineAlertService:
-    """Trend-following decline detector over the Bank Average median.
+class RiseAlertService:
+    """Informational rise detector over the Bank Average median.
 
-    Deliberately decoupled from RuleBasedRecommendationStrategy (mean-
-    reversion): a push alert is an early-warning signal, and the RUB cash
-    market in Armenia is flow-driven/thin rather than arbitraged, so a
-    confirmed decline is treated as likely to persist, not to revert. See
-    docs/superpowers/specs/2026-07-24-decline-alert-design.md.
+    Purely descriptive ("RUB is strengthening N times in a row") — does
+    NOT predict a peak or reversal; that is deferred to a future ML-based
+    phase (see docs/superpowers/specs/2026-07-25-rise-alert-design.md).
+    Like DeclineAlertService, this is deliberately decoupled from
+    RuleBasedRecommendationStrategy (used by /advice) — the two can
+    disagree without that being a bug; /advice answers a different
+    question (mean-reversion relative to recent history) than this alert
+    (a confirmed, ongoing rise).
+    Structurally identical to DeclineAlertService with the streak direction
+    flipped (operator.gt instead of operator.lt); the shared branching logic
+    lives in app.services.streak_detector.evaluate_streak.
 
-    check() does a read (NotificationStateRepository.get) then a write
-    (NotificationStateRepository.save) as two separate DB round trips, not
-    one transaction. This is safe only because the caller (app/bot/main.py)
-    runs this job with max_instances=1 in a single bot process, so calls to
-    check() never run concurrently. Running multiple bot replicas, or
-    dropping max_instances=1, would introduce a race between the read and
-    the write.
-
-    The streak/last-alerted-value branching itself lives in
-    app.services.streak_detector.evaluate_streak, shared with
-    RiseAlertService (operator.lt here, operator.gt there). See
-    docs/superpowers/specs/2026-07-25-rise-alert-design.md for why this was
-    extracted rather than duplicated.
+    Same non-atomic get-then-save caveat as DeclineAlertService: check()
+    does a read then a write as two separate DB round trips, safe only
+    because the caller (app/bot/main.py) runs this job with max_instances=1
+    in a single bot process.
     """
 
     def __init__(
@@ -63,7 +60,7 @@ class DeclineAlertService:
         self._notification_states = notification_states
         self._streak_threshold = streak_threshold
 
-    async def check(self) -> DeclineAlert | None:
+    async def check(self) -> RiseAlert | None:
         point = await self._exchange_rates.get_latest(
             BANK_AVERAGE_SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY
         )
@@ -92,12 +89,12 @@ class DeclineAlertService:
             previous_streak_length=state.streak_length,
             previous_last_alerted_value=state.last_alerted_value,
             streak_threshold=self._streak_threshold,
-            continues_trend=operator.lt,
+            continues_trend=operator.gt,
         )
 
-        alert: DeclineAlert | None = None
+        alert: RiseAlert | None = None
         if evaluation.should_alert:
-            alert = DeclineAlert(
+            alert = RiseAlert(
                 current_value=point.value,
                 streak_length=evaluation.streak_length,
                 previous_alerted_value=evaluation.previous_alerted_value,

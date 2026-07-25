@@ -30,6 +30,7 @@ from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE
 from app.services.collector_health_service import CollectorHealthService, SourceHealth
 from app.services.decline_alert_service import DeclineAlert, DeclineAlertService
 from app.services.rate_service import RateService
+from app.services.rise_alert_service import RiseAlert, RiseAlertService
 
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
@@ -156,12 +157,20 @@ async def status(message: Message) -> None:
     await message.answer(reply)
 
 
+def _times_word(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        return "раз"
+    if count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
+        return "раза"
+    return "раз"
+
+
 def format_decline_alert_message(alert: DeclineAlert, official_rate: RatePoint | None) -> str:
     lines = [
         "⚠️ RUB слабеет",
         (
-            f"Банковский курс наличной покупки RUB упал {alert.streak_length} раз подряд, "
-            f"сейчас {alert.current_value}."
+            f"Банковский курс наличной покупки RUB упал {alert.streak_length} "
+            f"{_times_word(alert.streak_length)} подряд, сейчас {alert.current_value}."
         ),
     ]
     if alert.previous_alerted_value is not None:
@@ -207,6 +216,50 @@ async def check_decline_and_notify(
         logger.exception("decline_alert.check_failed")
 
 
+def format_rise_alert_message(alert: RiseAlert, official_rate: RatePoint | None) -> str:
+    lines = [
+        "📈 RUB укрепляется",
+        (
+            f"Банковский курс наличной покупки RUB вырос {alert.streak_length} "
+            f"{_times_word(alert.streak_length)} подряд, сейчас {alert.current_value}."
+        ),
+    ]
+    if alert.previous_alerted_value is not None:
+        lines.append(f"Ещё выше, чем в прошлый раз я сообщал ({alert.previous_alerted_value}).")
+    if official_rate is not None:
+        lines.append(f"Официальный курс ЦБ Армении: {official_rate.value}.")
+    return "\n".join(lines)
+
+
+async def check_rise_and_notify(
+    bot: Bot,
+    session_factory: async_sessionmaker[AsyncSession],
+    admin_chat_id: int,
+    streak_threshold: int,
+) -> None:
+    try:
+        async with session_factory() as session:
+            exchange_rates = ExchangeRateRepository(session)
+            service = RiseAlertService(
+                exchange_rates,
+                NotificationStateRepository(session),
+                streak_threshold,
+            )
+            alert = await service.check()
+            if alert is None:
+                return
+            official_rate = await exchange_rates.get_latest(
+                SOURCE_NAME, _BASE_CURRENCY, _QUOTE_CURRENCY
+            )
+        text = format_rise_alert_message(alert, official_rate)
+        # Same at-most-once delivery trade-off as check_decline_and_notify:
+        # service.check() already persisted last_alerted_value above, so a
+        # send_message failure here silently drops this specific alert.
+        await bot.send_message(admin_chat_id, text)
+    except Exception:
+        logger.exception("rise_alert.check_failed")
+
+
 async def main() -> None:
     configure_logging()
     settings = get_settings()
@@ -219,7 +272,7 @@ async def main() -> None:
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
         check_decline_and_notify,
-        trigger=IntervalTrigger(minutes=settings.decline_alert_check_interval_minutes),
+        trigger=IntervalTrigger(minutes=settings.alert_check_interval_minutes),
         args=(
             bot,
             SessionFactory,
@@ -227,6 +280,21 @@ async def main() -> None:
             settings.decline_alert_streak_threshold,
         ),
         id="decline_alert_check",
+        next_run_time=datetime.now(UTC),
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=60,
+    )
+    scheduler.add_job(
+        check_rise_and_notify,
+        trigger=IntervalTrigger(minutes=settings.alert_check_interval_minutes),
+        args=(
+            bot,
+            SessionFactory,
+            settings.telegram_admin_chat_id,
+            settings.rise_alert_streak_threshold,
+        ),
+        id="rise_alert_check",
         next_run_time=datetime.now(UTC),
         max_instances=1,
         coalesce=True,
