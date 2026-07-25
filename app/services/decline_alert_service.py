@@ -96,21 +96,19 @@ class DeclineAlertService:
         )
 
         alert: DeclineAlert | None = None
-        last_alerted_value = evaluation.carried_last_alerted_value
         if evaluation.should_alert:
             alert = DeclineAlert(
                 current_value=point.value,
                 streak_length=evaluation.streak_length,
-                previous_alerted_value=evaluation.carried_last_alerted_value,
+                previous_alerted_value=evaluation.previous_alerted_value,
             )
-            last_alerted_value = point.value
 
         await self._notification_states.save(
             NotificationStateSnapshot(
                 signal_name=_SIGNAL_NAME,
                 last_value=point.value,
                 streak_length=evaluation.streak_length,
-                last_alerted_value=last_alerted_value,
+                last_alerted_value=evaluation.next_last_alerted_value,
                 updated_at=_utcnow(),
             )
         )

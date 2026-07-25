@@ -317,6 +317,7 @@ def test_format_rise_alert_message_without_previous_alert_or_official_rate() -> 
     assert "3.80" in text
     assert "прошлый раз" not in text
     assert "Официальный курс" not in text
+    assert "разменять" not in text
 
 
 def test_format_rise_alert_message_with_previous_alert_and_official_rate() -> None:
@@ -329,6 +330,7 @@ def test_format_rise_alert_message_with_previous_alert_and_official_rate() -> No
 
     assert "прошлый раз я сообщал (3.80)" in text
     assert "Официальный курс ЦБ Армении: 4.60" in text
+    assert "разменять" not in text
 
 
 async def test_check_rise_and_notify_sends_message_when_alert_fires(

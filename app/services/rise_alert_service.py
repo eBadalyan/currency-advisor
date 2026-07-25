@@ -35,6 +35,11 @@ class RiseAlertService:
     Purely descriptive ("RUB is strengthening N times in a row") — does
     NOT predict a peak or reversal; that is deferred to a future ML-based
     phase (see docs/superpowers/specs/2026-07-25-rise-alert-design.md).
+    Like DeclineAlertService, this is deliberately decoupled from
+    RuleBasedRecommendationStrategy (used by /advice) — the two can
+    disagree without that being a bug; /advice answers a different
+    question (mean-reversion relative to recent history) than this alert
+    (a confirmed, ongoing rise).
     Structurally identical to DeclineAlertService with the streak direction
     flipped (operator.gt instead of operator.lt); the shared branching logic
     lives in app.services.streak_detector.evaluate_streak.
@@ -88,21 +93,19 @@ class RiseAlertService:
         )
 
         alert: RiseAlert | None = None
-        last_alerted_value = evaluation.carried_last_alerted_value
         if evaluation.should_alert:
             alert = RiseAlert(
                 current_value=point.value,
                 streak_length=evaluation.streak_length,
-                previous_alerted_value=evaluation.carried_last_alerted_value,
+                previous_alerted_value=evaluation.previous_alerted_value,
             )
-            last_alerted_value = point.value
 
         await self._notification_states.save(
             NotificationStateSnapshot(
                 signal_name=_SIGNAL_NAME,
                 last_value=point.value,
                 streak_length=evaluation.streak_length,
-                last_alerted_value=last_alerted_value,
+                last_alerted_value=evaluation.next_last_alerted_value,
                 updated_at=_utcnow(),
             )
         )

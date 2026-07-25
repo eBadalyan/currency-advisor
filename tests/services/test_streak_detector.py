@@ -17,7 +17,8 @@ def test_continuing_move_increments_streak_and_carries_last_alerted() -> None:
     )
 
     assert result.streak_length == 2
-    assert result.carried_last_alerted_value is None
+    assert result.previous_alerted_value is None
+    assert result.next_last_alerted_value == Decimal("3.70")
     assert result.should_alert is True
 
 
@@ -32,7 +33,8 @@ def test_broken_move_resets_streak_and_clears_last_alerted() -> None:
     )
 
     assert result.streak_length == 0
-    assert result.carried_last_alerted_value is None
+    assert result.previous_alerted_value is None
+    assert result.next_last_alerted_value is None
     assert result.should_alert is False
 
 
@@ -47,6 +49,7 @@ def test_no_alert_below_threshold() -> None:
     )
 
     assert result.streak_length == 1
+    assert result.next_last_alerted_value is None
     assert result.should_alert is False
 
 
@@ -61,6 +64,8 @@ def test_realert_on_new_extreme_beyond_last_alerted() -> None:
     )
 
     assert result.streak_length == 3
+    assert result.previous_alerted_value == Decimal("3.72")
+    assert result.next_last_alerted_value == Decimal("3.71")
     assert result.should_alert is True
 
 
@@ -77,6 +82,7 @@ def test_no_realert_when_streak_continues_without_a_new_extreme() -> None:
     )
 
     assert result.streak_length == 3
+    assert result.next_last_alerted_value == Decimal("3.72")
     assert result.should_alert is False
 
 
@@ -91,7 +97,8 @@ def test_rise_direction_mirrors_decline_with_operator_gt() -> None:
     )
 
     assert result.streak_length == 2
-    assert result.carried_last_alerted_value is None
+    assert result.previous_alerted_value is None
+    assert result.next_last_alerted_value == Decimal("3.80")
     assert result.should_alert is True
 
 
@@ -106,5 +113,6 @@ def test_rise_direction_resets_on_a_drop() -> None:
     )
 
     assert result.streak_length == 0
-    assert result.carried_last_alerted_value is None
+    assert result.previous_alerted_value is None
+    assert result.next_last_alerted_value is None
     assert result.should_alert is False
