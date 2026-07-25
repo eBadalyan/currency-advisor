@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import operator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -10,6 +11,7 @@ from app.repositories.notification_state_repository import (
     NotificationStateSnapshot,
 )
 from app.services.bank_average_service import SOURCE_NAME as BANK_AVERAGE_SOURCE_NAME
+from app.services.streak_detector import evaluate_streak
 
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
@@ -43,6 +45,12 @@ class DeclineAlertService:
     check() never run concurrently. Running multiple bot replicas, or
     dropping max_instances=1, would introduce a race between the read and
     the write.
+
+    The streak/last-alerted-value branching itself lives in
+    app.services.streak_detector.evaluate_streak, shared with
+    RiseAlertService (operator.lt here, operator.gt there). See
+    docs/superpowers/specs/2026-07-25-rise-alert-design.md for why this was
+    extracted rather than duplicated.
     """
 
     def __init__(
@@ -78,21 +86,22 @@ class DeclineAlertService:
         if point.value == state.last_value:
             return None
 
-        if point.value < state.last_value:
-            streak_length = state.streak_length + 1
-            last_alerted_value = state.last_alerted_value
-        else:
-            streak_length = 0
-            last_alerted_value = None
+        evaluation = evaluate_streak(
+            current_value=point.value,
+            previous_value=state.last_value,
+            previous_streak_length=state.streak_length,
+            previous_last_alerted_value=state.last_alerted_value,
+            streak_threshold=self._streak_threshold,
+            continues_trend=operator.lt,
+        )
 
         alert: DeclineAlert | None = None
-        if streak_length >= self._streak_threshold and (
-            last_alerted_value is None or point.value < last_alerted_value
-        ):
+        last_alerted_value = evaluation.carried_last_alerted_value
+        if evaluation.should_alert:
             alert = DeclineAlert(
                 current_value=point.value,
-                streak_length=streak_length,
-                previous_alerted_value=last_alerted_value,
+                streak_length=evaluation.streak_length,
+                previous_alerted_value=evaluation.carried_last_alerted_value,
             )
             last_alerted_value = point.value
 
@@ -100,7 +109,7 @@ class DeclineAlertService:
             NotificationStateSnapshot(
                 signal_name=_SIGNAL_NAME,
                 last_value=point.value,
-                streak_length=streak_length,
+                streak_length=evaluation.streak_length,
                 last_alerted_value=last_alerted_value,
                 updated_at=_utcnow(),
             )
