@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.analytics.service import AnalyticsService
 from app.bot.main import (
+    _times_word,
     advice,
     banks,
     check_decline_and_notify,
@@ -241,6 +242,27 @@ async def test_status_handler_replies_with_formatted_status(
     assert "Статус источников данных:" in message.answer.call_args.args[0]
 
 
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (1, "раз"),
+        (2, "раза"),
+        (3, "раза"),
+        (4, "раза"),
+        (5, "раз"),
+        (11, "раз"),
+        (12, "раз"),
+        (21, "раз"),
+        (22, "раза"),
+        (25, "раз"),
+        (111, "раз"),
+        (112, "раз"),
+    ],
+)
+def test_times_word_russian_pluralization(count: int, expected: str) -> None:
+    assert _times_word(count) == expected
+
+
 def test_format_decline_alert_message_without_previous_alert_or_official_rate() -> None:
     alert = DeclineAlert(
         current_value=Decimal("3.72"), streak_length=2, previous_alerted_value=None
@@ -249,7 +271,7 @@ def test_format_decline_alert_message_without_previous_alert_or_official_rate() 
     text = format_decline_alert_message(alert, official_rate=None)
 
     assert "RUB слабеет" in text
-    assert "2 раз подряд" in text
+    assert "2 раза подряд" in text
     assert "3.72" in text
     assert "прошлый раз" not in text
     assert "Официальный курс" not in text
@@ -313,7 +335,7 @@ def test_format_rise_alert_message_without_previous_alert_or_official_rate() -> 
     text = format_rise_alert_message(alert, official_rate=None)
 
     assert "RUB укрепляется" in text
-    assert "2 раз подряд" in text
+    assert "2 раза подряд" in text
     assert "3.80" in text
     assert "прошлый раз" not in text
     assert "Официальный курс" not in text

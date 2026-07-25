@@ -157,12 +157,20 @@ async def status(message: Message) -> None:
     await message.answer(reply)
 
 
+def _times_word(count: int) -> str:
+    if count % 10 == 1 and count % 100 != 11:
+        return "раз"
+    if count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
+        return "раза"
+    return "раз"
+
+
 def format_decline_alert_message(alert: DeclineAlert, official_rate: RatePoint | None) -> str:
     lines = [
         "⚠️ RUB слабеет",
         (
-            f"Банковский курс наличной покупки RUB упал {alert.streak_length} раз подряд, "
-            f"сейчас {alert.current_value}."
+            f"Банковский курс наличной покупки RUB упал {alert.streak_length} "
+            f"{_times_word(alert.streak_length)} подряд, сейчас {alert.current_value}."
         ),
     ]
     if alert.previous_alerted_value is not None:
@@ -212,8 +220,8 @@ def format_rise_alert_message(alert: RiseAlert, official_rate: RatePoint | None)
     lines = [
         "📈 RUB укрепляется",
         (
-            f"Банковский курс наличной покупки RUB вырос {alert.streak_length} раз подряд, "
-            f"сейчас {alert.current_value}."
+            f"Банковский курс наличной покупки RUB вырос {alert.streak_length} "
+            f"{_times_word(alert.streak_length)} подряд, сейчас {alert.current_value}."
         ),
     ]
     if alert.previous_alerted_value is not None:
