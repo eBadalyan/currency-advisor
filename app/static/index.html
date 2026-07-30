@@ -173,9 +173,81 @@
 
   .chart-card { margin-top: 1rem; padding: 1.25rem 1.25rem 0.75rem; height: 260px; }
   canvas { max-width: 100%; }
+
+  /* Ambient background: faint drifting glow + slowly flowing chart-like
+     lines, purely decorative — fixed behind all content, never intercepts
+     clicks, and stays subtle enough not to compete with real data. */
+  .bg-fx {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .page { position: relative; z-index: 1; }
+
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    will-change: transform;
+  }
+  .blob-a {
+    width: 46vw; height: 46vw;
+    top: -12vw; left: -10vw;
+    background: radial-gradient(circle, rgba(129,140,248,0.35), transparent 70%);
+    animation: drift-a 34s ease-in-out infinite alternate;
+  }
+  .blob-b {
+    width: 40vw; height: 40vw;
+    bottom: -14vw; right: -8vw;
+    background: radial-gradient(circle, rgba(251,191,36,0.16), transparent 70%);
+    animation: drift-b 40s ease-in-out infinite alternate;
+  }
+  @keyframes drift-a {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(4vw, 5vw) scale(1.08); }
+  }
+  @keyframes drift-b {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(-3vw, -4vw) scale(1.05); }
+  }
+
+  .bg-lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .bg-lines path {
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-dasharray: 2 14;
+    animation: flow 26s linear infinite;
+  }
+  .bg-lines .line-a { stroke: rgba(129,140,248,0.32); animation-duration: 22s; }
+  .bg-lines .line-b { stroke: rgba(251,191,36,0.22); animation-duration: 30s; animation-direction: reverse; }
+  @keyframes flow { to { stroke-dashoffset: -400; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .blob, .bg-lines path { animation: none; }
+  }
 </style>
 </head>
 <body>
+
+<div class="bg-fx" aria-hidden="true">
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+  <svg class="bg-lines" viewBox="0 0 1200 800" preserveAspectRatio="none">
+    <path class="line-a" d="M -50,560 C 150,480 250,620 400,540 S 650,380 800,460 S 1050,560 1250,480" />
+    <path class="line-b" d="M -50,260 C 180,340 300,180 460,260 S 720,380 880,300 S 1080,200 1250,280" />
+  </svg>
+</div>
+
+<div class="page">
 
 <h1>Currency Advisor</h1>
 
@@ -205,6 +277,8 @@
     <div id="status-content" class="placeholder">Загрузка…</div>
   </div>
 </section>
+
+</div>
 
 <script>
 const ACTION_LABELS = { exchange_now: "Менять сейчас", wait: "Подождать", neutral: "Нет чёткой рекомендации" };
