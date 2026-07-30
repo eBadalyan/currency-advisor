@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from starlette.staticfiles import StaticFiles
 
 from app.api.routes.advice import router as advice_router
 from app.api.routes.banks import router as banks_router
@@ -33,6 +34,7 @@ app.include_router(health_router)
 app.include_router(rates_router)
 app.include_router(advice_router)
 app.include_router(banks_router)
+app.mount("/dashboard", StaticFiles(directory="app/static", html=True), name="dashboard")
 
 
 @app.get("/")
