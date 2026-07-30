@@ -22,6 +22,7 @@ uv run uvicorn app.main:app --reload
 Проверка:
 - http://127.0.0.1:8000/health
 - http://127.0.0.1:8000/docs
+- http://127.0.0.1:8000/dashboard/
 
 ## Тесты и проверка стиля
 

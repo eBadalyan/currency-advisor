@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Currency Advisor</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #08090d;
+    --card: #131620;
+    --card-hover: #171b28;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text: #f3f4f8;
+    --muted: #8b8fa3;
+    --accent: #818cf8;
+    --accent-2: #a78bfa;
+    --accent-soft: rgba(129, 140, 248, 0.16);
+    --green: #4ade80;
+    --green-soft: rgba(74, 222, 128, 0.14);
+    --amber: #fbbf24;
+    --amber-soft: rgba(251, 191, 36, 0.14);
+    --red: #f87171;
+    --red-soft: rgba(248, 113, 113, 0.14);
+    --shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 10px 30px -14px rgba(0, 0, 0, 0.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  ::selection { background: var(--accent-soft); color: var(--text); }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background:
+      radial-gradient(900px 500px at 15% -10%, rgba(129, 140, 248, 0.12), transparent 60%),
+      radial-gradient(700px 500px at 100% 0%, rgba(167, 139, 250, 0.08), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+  }
+
+  nav {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: var(--border);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+  }
+  nav button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  nav button.active {
+    background: var(--card);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  nav button:not(.active):hover { color: var(--text); }
+
+  section { display: none; }
+  section.active { display: block; animation: fade-in 0.2s ease; }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 1rem; }
+
+  .placeholder { color: var(--muted); font-style: italic; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .badge.exchange_now { background: var(--green-soft); color: var(--green); }
+  .badge.wait { background: var(--amber-soft); color: var(--amber); }
+  .badge.neutral { background: var(--border-strong); color: var(--muted); }
+  .badge.ok { background: var(--green-soft); color: var(--green); }
+  .badge.stale { background: var(--red-soft); color: var(--red); }
+
+  .summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.25rem;
+  }
+  .confidence { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .summary-text { color: var(--muted); margin: 0.5rem 0 1.25rem; }
+
+  .factor {
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    font-size: 0.92rem;
+  }
+  .factor:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    padding: 0 0.6rem 0.6rem;
+  }
+  td {
+    padding: 0.65rem 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+  tr:first-child td { border-top: none; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+
+  .stat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+  .stat-label { color: var(--muted); font-size: 0.9rem; }
+  .stat-value { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .chart-card { margin-top: 1rem; padding: 1.25rem 1.25rem 0.75rem; height: 260px; }
+  canvas { max-width: 100%; }
+
+  /* Ambient background: faint drifting glow + slowly flowing chart-like
+     lines, purely decorative — fixed behind all content, never intercepts
+     clicks, and stays subtle enough not to compete with real data. */
+  .bg-fx {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .page { position: relative; z-index: 1; }
+
+  .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.5;
+    will-change: transform;
+  }
+  .blob-a {
+    width: 46vw; height: 46vw;
+    top: -12vw; left: -10vw;
+    background: radial-gradient(circle, rgba(129,140,248,0.35), transparent 70%);
+    animation: drift-a 34s ease-in-out infinite alternate;
+  }
+  .blob-b {
+    width: 40vw; height: 40vw;
+    bottom: -14vw; right: -8vw;
+    background: radial-gradient(circle, rgba(251,191,36,0.16), transparent 70%);
+    animation: drift-b 40s ease-in-out infinite alternate;
+  }
+  @keyframes drift-a {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(4vw, 5vw) scale(1.08); }
+  }
+  @keyframes drift-b {
+    from { transform: translate(0, 0) scale(1); }
+    to   { transform: translate(-3vw, -4vw) scale(1.05); }
+  }
+
+  .bg-lines {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .bg-lines path {
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-dasharray: 2 14;
+    animation: flow 26s linear infinite;
+  }
+  .bg-lines .line-a { stroke: rgba(129,140,248,0.32); animation-duration: 22s; }
+  .bg-lines .line-b { stroke: rgba(251,191,36,0.22); animation-duration: 30s; animation-direction: reverse; }
+  @keyframes flow { to { stroke-dashoffset: -400; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .blob, .bg-lines path { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-fx" aria-hidden="true">
+  <div class="blob blob-a"></div>
+  <div class="blob blob-b"></div>
+  <svg class="bg-lines" viewBox="0 0 1200 800" preserveAspectRatio="none">
+    <path class="line-a" d="M -50,560 C 150,480 250,620 400,540 S 650,380 800,460 S 1050,560 1250,480" />
+    <path class="line-b" d="M -50,260 C 180,340 300,180 460,260 S 720,380 880,300 S 1080,200 1250,280" />
+  </svg>
+</div>
+
+<div class="page">
+
+<h1>Currency Advisor</h1>
+
+<nav>
+  <button data-tab="advice" class="active">Курс и рекомендация</button>
+  <button data-tab="banks">Банки</button>
+  <button data-tab="status">Статус</button>
+</nav>
+
+<section id="advice" class="active">
+  <div class="card">
+    <div id="advice-content" class="placeholder">Загрузка…</div>
+  </div>
+  <div class="card chart-card">
+    <canvas id="rate-chart"></canvas>
+  </div>
+</section>
+
+<section id="banks">
+  <div class="card">
+    <div id="banks-content" class="placeholder">Загрузка…</div>
+  </div>
+</section>
+
+<section id="status">
+  <div class="card">
+    <div id="status-content" class="placeholder">Загрузка…</div>
+  </div>
+</section>
+
+</div>
+
+<script>
+const ACTION_LABELS = { exchange_now: "Менять сейчас", wait: "Подождать", neutral: "Нет чёткой рекомендации" };
+
+document.querySelectorAll("nav button").forEach((button) => {
+  button.addEventListener("click", () => {
+    document.querySelectorAll("nav button").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll("section").forEach((s) => s.classList.remove("active"));
+    button.classList.add("active");
+    document.getElementById(button.dataset.tab).classList.add("active");
+  });
+});
+
+async function loadAdvice() {
+  const el = document.getElementById("advice-content");
+  try {
+    const response = await fetch("/advice");
+    if (response.status === 404) {
+      el.textContent = "Пока нет данных для рекомендации.";
+      return;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    el.classList.remove("placeholder");
+    const actionClass = ACTION_LABELS[data.action] ? data.action : "neutral";
+    el.innerHTML = `
+      <div class="summary-row">
+        <span class="badge ${actionClass}">${ACTION_LABELS[data.action] ?? data.action}</span>
+        <span class="confidence">Уверенность: ${Math.round(Number(data.confidence) * 100)}%</span>
+      </div>
+      <p class="summary-text">${data.summary}</p>
+      ${data.factors.map((f) => `<div class="factor">${f.explanation}</div>`).join("")}
+    `;
+  } catch (err) {
+    el.textContent = "Не удалось загрузить рекомендацию.";
+  }
+}
+
+async function loadBanks() {
+  const el = document.getElementById("banks-content");
+  try {
+    const response = await fetch("/banks");
+    if (response.status === 404) {
+      el.textContent = "Пока нет банковских курсов.";
+      return;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    el.classList.remove("placeholder");
+    const rows = data.banks
+      .map((b) => `<tr><td>${b.source}</td><td class="num">${b.value ?? "нет данных"}</td></tr>`)
+      .join("");
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>Банк</th><th style="text-align:right">Курс наличной покупки RUB</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="stat-row">
+        <span class="stat-label">Медиана</span>
+        <span class="stat-value">${data.median ?? "нет данных"}</span>
+      </div>
+    `;
+  } catch (err) {
+    el.textContent = "Не удалось загрузить банковские курсы.";
+  }
+}
+
+async function loadStatus() {
+  const el = document.getElementById("status-content");
+  try {
+    const response = await fetch("/health/collectors");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    el.classList.remove("placeholder");
+    const rows = data
+      .map((s) => {
+        const pair = `${s.base_currency}/${s.quote_currency}`;
+        const state = s.last_observed_at === null
+          ? "нет данных"
+          : new Date(s.last_observed_at).toLocaleString("ru-RU");
+        const badge = s.is_stale
+          ? `<span class="badge stale">устарело</span>`
+          : `<span class="badge ok">актуально</span>`;
+        return `<tr><td>${s.source}<br><span class="confidence">${pair}</span></td><td>${state}</td><td style="text-align:right">${badge}</td></tr>`;
+      })
+      .join("");
+    el.innerHTML = `
+      <table>
+        <thead><tr><th>Источник</th><th>Последние данные</th><th style="text-align:right">Статус</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch (err) {
+    el.textContent = "Не удалось загрузить статус источников.";
+  }
+}
+
+async function loadChart() {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  async function series(source) {
+    const params = new URLSearchParams({ base_currency: "RUB", quote_currency: "AMD", since, limit: 1000 });
+    if (source) params.set("source", source);
+    const response = await fetch(`/rates/history?${params.toString()}`);
+    if (!response.ok) return [];
+    const points = await response.json();
+    return points.reverse().map((p) => ({ x: p.observed_at, y: Number(p.value) }));
+  }
+
+  try {
+    const [official, bankMedian] = await Promise.all([
+      // No `source` param: /rates/history already defaults to the official
+      // CBA source (see app/api/routes/rates.py), so this stays correct
+      // even if CBA_SOURCE_NAME is renamed.
+      series(),
+      // Must be kept in sync with app/services/bank_average_service.py's SOURCE_NAME constant.
+      series("Bank Average (RUB cash, derived)"),
+    ]);
+    if (official.length === 0 && bankMedian.length === 0) return;
+
+    const gridColor = "rgba(255,255,255,0.06)";
+    const tickColor = "#8b8fa3";
+
+    new Chart(document.getElementById("rate-chart"), {
+      type: "line",
+      data: {
+        datasets: [
+          {
+            label: "Официальный курс ЦБ Армении",
+            data: official,
+            borderColor: "#818cf8",
+            backgroundColor: "rgba(129,140,248,0.14)",
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+          },
+          {
+            label: "Банковская медиана",
+            data: bankMedian,
+            borderColor: "#fbbf24",
+            backgroundColor: "rgba(251,191,36,0.10)",
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "bottom", labels: { color: tickColor, boxWidth: 10, usePointStyle: true } },
+        },
+        scales: {
+          x: { type: "time", time: { unit: "day" }, grid: { color: gridColor }, ticks: { color: tickColor } },
+          y: { grid: { color: gridColor }, ticks: { color: tickColor } },
+        },
+      },
+    });
+  } catch (err) {
+    // Chart is a bonus visualization on the advice tab — a failure here
+    // must not block the recommendation text above it from rendering.
+  }
+}
+
+loadAdvice();
+loadBanks();
+loadStatus();
+loadChart();
+</script>
+
+</body>
+</html>
