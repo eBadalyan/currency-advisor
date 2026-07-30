@@ -7,22 +7,173 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3"></script>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.4rem; }
-  nav { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
-  nav button {
-    padding: 0.5rem 1rem; border: 1px solid #ccc; background: #f5f5f5;
-    border-radius: 6px; cursor: pointer; font-size: 1rem;
+  :root {
+    --bg: #f4f6fb;
+    --card: #ffffff;
+    --border: #e5e9f2;
+    --text: #0f1729;
+    --muted: #6b7488;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --amber: #b45309;
+    --amber-soft: #fffbeb;
+    --red: #dc2626;
+    --red-soft: #fef2f2;
+    --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12);
   }
-  nav button.active { background: #2563eb; color: white; border-color: #2563eb; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220;
+      --card: #121a2e;
+      --border: #232d45;
+      --text: #eef1f8;
+      --muted: #8993ac;
+      --accent: #818cf8;
+      --accent-soft: #1b1f3d;
+      --green: #34d399;
+      --green-soft: #0c2620;
+      --amber: #fbbf24;
+      --amber-soft: #2a2210;
+      --red: #f87171;
+      --red-soft: #2a1414;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2.5rem 1.25rem 4rem;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem;
+  }
+
+  nav {
+    display: inline-flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: var(--border);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+  }
+  nav button {
+    padding: 0.5rem 1rem;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  nav button.active {
+    background: var(--card);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+  nav button:not(.active):hover { color: var(--text); }
+
   section { display: none; }
-  section.active { display: block; }
-  .placeholder { color: #888; font-style: italic; }
-  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-  td, th { padding: 0.4rem 0.6rem; text-align: left; border-bottom: 1px solid #eee; }
-  .factor { margin: 0.5rem 0; padding: 0.5rem; background: #f9fafb; border-radius: 6px; }
-  .stale { color: #b91c1c; }
-  .ok { color: #15803d; }
+  section.active { display: block; animation: fade-in 0.2s ease; }
+  @keyframes fade-in { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+  .card + .card { margin-top: 1rem; }
+
+  .placeholder { color: var(--muted); font-style: italic; }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+  .badge.exchange_now { background: var(--green-soft); color: var(--green); }
+  .badge.wait { background: var(--amber-soft); color: var(--amber); }
+  .badge.neutral { background: var(--border); color: var(--muted); }
+  .badge.ok { background: var(--green-soft); color: var(--green); }
+  .badge.stale { background: var(--red-soft); color: var(--red); }
+
+  .summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.25rem;
+  }
+  .confidence { font-size: 0.85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .summary-text { color: var(--muted); margin: 0.5rem 0 1.25rem; }
+
+  .factor {
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.5rem;
+    background: var(--bg);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    font-size: 0.92rem;
+  }
+  .factor:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left;
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    padding: 0 0.6rem 0.6rem;
+  }
+  td {
+    padding: 0.65rem 0.6rem;
+    border-top: 1px solid var(--border);
+  }
+  tr:first-child td { border-top: none; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; }
+
+  .stat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--border);
+  }
+  .stat-label { color: var(--muted); font-size: 0.9rem; }
+  .stat-value { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .chart-card { margin-top: 1rem; padding: 1.25rem 1.25rem 0.75rem; height: 260px; }
   canvas { max-width: 100%; }
 </style>
 </head>
@@ -37,16 +188,24 @@
 </nav>
 
 <section id="advice" class="active">
-  <div id="advice-content" class="placeholder">Загрузка…</div>
-  <canvas id="rate-chart" height="120"></canvas>
+  <div class="card">
+    <div id="advice-content" class="placeholder">Загрузка…</div>
+  </div>
+  <div class="card chart-card">
+    <canvas id="rate-chart"></canvas>
+  </div>
 </section>
 
 <section id="banks">
-  <div id="banks-content" class="placeholder">Загрузка…</div>
+  <div class="card">
+    <div id="banks-content" class="placeholder">Загрузка…</div>
+  </div>
 </section>
 
 <section id="status">
-  <div id="status-content" class="placeholder">Загрузка…</div>
+  <div class="card">
+    <div id="status-content" class="placeholder">Загрузка…</div>
+  </div>
 </section>
 
 <script>
@@ -72,9 +231,13 @@ async function loadAdvice() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     el.classList.remove("placeholder");
+    const actionClass = ACTION_LABELS[data.action] ? data.action : "neutral";
     el.innerHTML = `
-      <h2>${ACTION_LABELS[data.action] ?? data.action}</h2>
-      <p>${data.summary}</p>
+      <div class="summary-row">
+        <span class="badge ${actionClass}">${ACTION_LABELS[data.action] ?? data.action}</span>
+        <span class="confidence">Уверенность: ${Math.round(Number(data.confidence) * 100)}%</span>
+      </div>
+      <p class="summary-text">${data.summary}</p>
       ${data.factors.map((f) => `<div class="factor">${f.explanation}</div>`).join("")}
     `;
   } catch (err) {
@@ -94,14 +257,17 @@ async function loadBanks() {
     const data = await response.json();
     el.classList.remove("placeholder");
     const rows = data.banks
-      .map((b) => `<tr><td>${b.source}</td><td>${b.value ?? "нет данных"}</td></tr>`)
+      .map((b) => `<tr><td>${b.source}</td><td class="num">${b.value ?? "нет данных"}</td></tr>`)
       .join("");
     el.innerHTML = `
       <table>
-        <thead><tr><th>Банк</th><th>Курс наличной покупки RUB</th></tr></thead>
+        <thead><tr><th>Банк</th><th style="text-align:right">Курс наличной покупки RUB</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
-      <p>Медиана: ${data.median ?? "нет данных"}</p>
+      <div class="stat-row">
+        <span class="stat-label">Медиана</span>
+        <span class="stat-value">${data.median ?? "нет данных"}</span>
+      </div>
     `;
   } catch (err) {
     el.textContent = "Не удалось загрузить банковские курсы.";
@@ -121,13 +287,15 @@ async function loadStatus() {
         const state = s.last_observed_at === null
           ? "нет данных"
           : new Date(s.last_observed_at).toLocaleString("ru-RU");
-        const cls = s.is_stale ? "stale" : "ok";
-        return `<tr><td>${s.source}</td><td>${pair}</td><td class="${cls}">${state}</td></tr>`;
+        const badge = s.is_stale
+          ? `<span class="badge stale">устарело</span>`
+          : `<span class="badge ok">актуально</span>`;
+        return `<tr><td>${s.source}<br><span class="confidence">${pair}</span></td><td>${state}</td><td style="text-align:right">${badge}</td></tr>`;
       })
       .join("");
     el.innerHTML = `
       <table>
-        <thead><tr><th>Источник</th><th>Пара</th><th>Последние данные</th></tr></thead>
+        <thead><tr><th>Источник</th><th>Последние данные</th><th style="text-align:right">Статус</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     `;
@@ -153,16 +321,47 @@ async function loadChart() {
     ]);
     if (official.length === 0 && bankMedian.length === 0) return;
 
+    const isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const gridColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(15,23,42,0.06)";
+    const tickColor = isDark ? "#8993ac" : "#6b7488";
+
     new Chart(document.getElementById("rate-chart"), {
       type: "line",
       data: {
         datasets: [
-          { label: "Официальный курс ЦБ Армении", data: official, borderColor: "#2563eb", pointRadius: 0 },
-          { label: "Банковская медиана", data: bankMedian, borderColor: "#f59e0b", pointRadius: 0 },
+          {
+            label: "Официальный курс ЦБ Армении",
+            data: official,
+            borderColor: "#4f46e5",
+            backgroundColor: "rgba(79,70,229,0.08)",
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+          },
+          {
+            label: "Банковская медиана",
+            data: bankMedian,
+            borderColor: "#f59e0b",
+            backgroundColor: "rgba(245,158,11,0.08)",
+            pointRadius: 0,
+            borderWidth: 2,
+            tension: 0.3,
+            fill: true,
+          },
         ],
       },
       options: {
-        scales: { x: { type: "time", time: { unit: "day" } } },
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { position: "bottom", labels: { color: tickColor, boxWidth: 10, usePointStyle: true } },
+        },
+        scales: {
+          x: { type: "time", time: { unit: "day" }, grid: { color: gridColor }, ticks: { color: tickColor } },
+          y: { grid: { color: gridColor }, ticks: { color: tickColor } },
+        },
       },
     });
   } catch (err) {
