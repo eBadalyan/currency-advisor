@@ -379,8 +379,9 @@ async function loadStatus() {
 async function loadChart() {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   async function series(source) {
-    const url = `/rates/history?base_currency=RUB&quote_currency=AMD&source=${encodeURIComponent(source)}&since=${since}&limit=1000`;
-    const response = await fetch(url);
+    const params = new URLSearchParams({ base_currency: "RUB", quote_currency: "AMD", since, limit: 1000 });
+    if (source) params.set("source", source);
+    const response = await fetch(`/rates/history?${params.toString()}`);
     if (!response.ok) return [];
     const points = await response.json();
     return points.reverse().map((p) => ({ x: p.observed_at, y: Number(p.value) }));
@@ -388,7 +389,11 @@ async function loadChart() {
 
   try {
     const [official, bankMedian] = await Promise.all([
-      series("Central Bank of Armenia"),
+      // No `source` param: /rates/history already defaults to the official
+      // CBA source (see app/api/routes/rates.py), so this stays correct
+      // even if CBA_SOURCE_NAME is renamed.
+      series(),
+      // Must be kept in sync with app/services/bank_average_service.py's SOURCE_NAME constant.
       series("Bank Average (RUB cash, derived)"),
     ]);
     if (official.length === 0 && bankMedian.length === 0) return;
