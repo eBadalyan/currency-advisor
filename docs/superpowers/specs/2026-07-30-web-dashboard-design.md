@@ -39,8 +39,13 @@ FastAPI-инстансом можно рассмотреть позже, отд�
   `RecommendationService.get_recommendation()`.
 - `app/api/routes/banks.py` — `GET /banks`, оборачивает `RateService` для
   4 банковских источников + медианы (`BANK_AVERAGE_SOURCE_NAME`).
-- `app/api/routes/status.py` — `GET /status`, оборачивает
-  `CollectorHealthService.get_status()`.
+- **Статус источников — новый роут не нужен.** При изучении кода
+  обнаружилось, что `GET /health/collectors` (`app/api/routes/health.py`,
+  уже существует) отдаёт ровно то же самое, что нужно вкладке "Статус":
+  `SourceHealthResponse` (source, base_currency, quote_currency,
+  last_observed_at | null, is_stale) через уже существующую
+  `app/schemas/collector_health.py`. Вкладка "Статус" на странице просто
+  обращается к этому эндпоинту напрямую.
 
 ### Новые схемы (по образцу `app/schemas/rates.py`)
 
@@ -50,11 +55,10 @@ FastAPI-инстансом можно рассмотреть позже, отд�
   собирается под Telegram); фронтенд сам решает, как красиво отрисовать.
 - `app/schemas/banks.py` — `BankRateResponse` (source, value | null),
   `BanksResponse` (список банков + медиана | null).
-- `app/schemas/status.py` — `SourceStatusResponse` (source, base_currency,
-  quote_currency, last_observed_at | null, is_stale).
 
-Существующий `/rates/history` и `/rates/latest` переиспользуются как есть —
-новых эндпоинтов под график не требуется.
+Существующий `/rates/history`, `/rates/latest` и `/health/collectors`
+переиспользуются как есть — под график и статус новых эндпоинтов не
+требуется.
 
 ### Статика
 
@@ -79,8 +83,9 @@ FastAPI-инстансом можно рассмотреть позже, отд�
 ## Data flow
 
 1. `GET /dashboard/` отдаёт `index.html`.
-2. При загрузке JS параллельно запрашивает: `/advice`, `/banks`, `/status`,
-   `/rates/latest?source=CBA...`, `/rates/history?source=CBA...&since=...`,
+2. При загрузке JS параллельно запрашивает: `/advice`, `/banks`,
+   `/health/collectors`, `/rates/latest?source=CBA...`,
+   `/rates/history?source=CBA...&since=...`,
    `/rates/history?source=Bank+Average...&since=...`.
 3. Каждый запрос обрабатывается независимо (см. "Обработка ошибок" ниже) —
    вкладки заполняются по мере готовности данных.
@@ -97,18 +102,21 @@ FastAPI-инстансом можно рассмотреть позже, отд�
 - `/banks` — терпит частичные `None` по отдельным банкам (как уже делает
   `format_banks_reply` в боте); `404` только если все банки одновременно
   `None` — то же условие, что уже в боте.
-- `/status` — всегда `200`: "нет данных"/"устарело" уже часть самого
-  ответа `CollectorHealthService`, не ошибка.
+- `/health/collectors` (переиспользуемый, не новый) — всегда `200`: "нет
+  данных"/"устарело" уже часть самого ответа `CollectorHealthService`, не
+  ошибка.
 - Фронтенд: каждая вкладка грузится и обрабатывает ошибку независимо
   (`try/catch` на каждый `fetch`) — `404` на одной вкладке показывает
   "пока нет данных" только в ней, не блокируя остальные.
 
 ## Тестирование
 
-- `tests/api/test_advice.py`, `tests/api/test_banks.py`,
-  `tests/api/test_status.py` (новые, по образцу `tests/api/test_rates.py`) —
-  dependency override на сервисный слой, проверка кода ответа и формы JSON,
-  включая `404`-кейсы и частичные банковские данные.
+- `tests/api/test_advice.py`, `tests/api/test_banks.py` (новые, по образцу
+  `tests/api/test_rates.py`) — реальная тестовая БД (как и у существующих
+  API-тестов, без мока сервисного слоя), проверка кода ответа и формы JSON,
+  включая `404`-кейсы и частичные банковские данные. Отдельного теста под
+  статус не требуется — `/health/collectors` уже покрыт существующими
+  тестами.
 - `ruff`/`mypy --strict` покрывают только новые `.py`-файлы (роуты, схемы).
   `index.html` и встроенный в него JS — вне Python-тулчейна, CI их не
   проверяет; это ожидаемое ограничение для данного этапа, не пробел.
