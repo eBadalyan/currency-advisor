@@ -3,7 +3,10 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from starlette.staticfiles import StaticFiles
 
+from app.api.routes.advice import router as advice_router
+from app.api.routes.banks import router as banks_router
 from app.api.routes.health import router as health_router
 from app.api.routes.rates import router as rates_router
 from app.core.config import get_settings
@@ -29,6 +32,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 app.include_router(health_router)
 app.include_router(rates_router)
+app.include_router(advice_router)
+app.include_router(banks_router)
+app.mount("/dashboard", StaticFiles(directory="app/static", html=True), name="dashboard")
 
 
 @app.get("/")

@@ -12,12 +12,9 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.analytics.service import AnalyticsService
-from app.collectors.acba_bank import SOURCE_NAME as ACBA_BANK_SOURCE_NAME
-from app.collectors.ameriabank import SOURCE_NAME as AMERIABANK_SOURCE_NAME
+from app.collectors.bank_sources import BANK_SOURCES
 from app.collectors.base import RatePoint
 from app.collectors.cba import SOURCE_NAME
-from app.collectors.evocabank import SOURCE_NAME as EVOCABANK_SOURCE_NAME
-from app.collectors.vtb_am import SOURCE_NAME as VTB_AM_SOURCE_NAME
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.db.session import SessionFactory
@@ -34,14 +31,6 @@ from app.services.rise_alert_service import RiseAlert, RiseAlertService
 
 _BASE_CURRENCY = "RUB"
 _QUOTE_CURRENCY = "AMD"
-
-# Display order for /banks — not alphabetical, just a stable, readable order.
-_BANK_SOURCES = (
-    AMERIABANK_SOURCE_NAME,
-    EVOCABANK_SOURCE_NAME,
-    ACBA_BANK_SOURCE_NAME,
-    VTB_AM_SOURCE_NAME,
-)
 
 _ACTION_LABELS = {
     RecommendationAction.EXCHANGE_NOW: "Менять сейчас",
@@ -83,7 +72,7 @@ async def rate(message: Message) -> None:
 async def format_banks_reply(service: RateService) -> str:
     bank_points = [
         (source, await service.get_latest_rate(source, _BASE_CURRENCY, _QUOTE_CURRENCY))
-        for source in _BANK_SOURCES
+        for source in BANK_SOURCES
     ]
     if all(point is None for _, point in bank_points):
         return "Банковские курсы наличного обмена пока не собраны. Попробуйте позже."

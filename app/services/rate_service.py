@@ -10,9 +10,8 @@ logger = logging.getLogger(__name__)
 
 class RateService:
     """Connects the Repository to Collectors (write path) and to callers
-    that need a business-facing read (currently just the Bot — the API
-    reads straight through the Repository instead, since its routes add
-    no logic on top of a plain lookup).
+    that need a business-facing read — the Bot and the /banks API route
+    both go through this service rather than the Repository directly.
 
     Takes the collector as a parameter rather than binding one at
     construction time, so a single service instance can run any
